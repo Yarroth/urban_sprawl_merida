@@ -136,10 +136,12 @@ def compute_ca_probability(ca_model, features, urban, p_lgbm):
 def simulate_scenario(lgbm_model, ca_model, urban_base, features, profile,
                       lst_map, cenote_dist, karst_vuln, scenario):
     from config.settings import KARST_CONFIG
-    log.info(f"\n  Escenario: {scenario.upper()}")
     sc_cfg = CA_CONFIG["scenarios"][scenario]
     alpha = sc_cfg["alpha"]; beta = sc_cfg["beta"]
     gamma = sc_cfg["gamma"]; delta = sc_cfg["delta"]
+    # Tasa de conversión por escenario (la gestión desacelera la expansión)
+    growth_rate = sc_cfg.get("growth_rate", CA_CONFIG["annual_growth_rate"])
+    log.info(f"\n  Escenario: {scenario.upper()} (tasa {growth_rate*100:.1f}%/año)")
 
     current = urban_base.copy()
     urban_series = {BASE_YEAR: current.copy()}
@@ -188,8 +190,8 @@ def simulate_scenario(lgbm_model, ca_model, urban_base, features, profile,
         if int(excl.sum()) > 0:
             log.info(f"      {int(excl.sum()):,} celdas excluidas ({excl.sum()/current.size*100:.1f}%)")
 
-        # Convertir N celdas
-        n_convert = int(current.sum() * CA_CONFIG["annual_growth_rate"])
+        # Convertir N celdas (cupo dependiente del escenario)
+        n_convert = int(current.sum() * growth_rate)
         n_convert = min(n_convert, max(0, int((current==0).sum()) - int(excl.sum())))
         flat = p_total.ravel()
         top_idx = np.argsort(flat)[-n_convert:]

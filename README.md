@@ -138,6 +138,11 @@ P_total = α · P_LightGBM + β · P_CA_aprendida + γ · (1 - P_kárstico) + δ
 | β (CA aprendida) | 0.30 | 0.30 | 0.25 |
 | γ (kárstico) | 0.00 | 0.05 | 0.15 |
 | δ (estocástico) | 0.10 | 0.10 | 0.05 |
+| Tasa anual de conversión | 3.5% | 3.1% | 2.7% |
+
+La tasa anual por escenario (campo `growth_rate` en `CA_CONFIG["scenarios"]`)
+modula el cupo de conversión del CA: los escenarios con gestión crecen menos y
+distinto, de modo que el área proyectada diverge además de la ubicación.
 
 ---
 

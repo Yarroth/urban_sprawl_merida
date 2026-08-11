@@ -109,10 +109,18 @@ CA_CONFIG = {
     "ca_rule_features": FEATURE_NAMES + ["p_lgbm"],
 
     # Escenarios predefinidos
+    # growth_rate: tasa de conversión anual por escenario. Los escenarios con
+    # gestión (plan_trad/ia_optimo) desaceleran la expansión frente a no_plan,
+    # reflejando compactación/densificación en lugar de dispersión. El área
+    # proyectada por escenario así diverge además de la ubicación.
     "scenarios": {
-        "no_plan":    {"alpha":0.60,"beta":0.30,"gamma":0.00,"delta":0.10,"exclusions":[]},
-        "plan_trad":  {"alpha":0.55,"beta":0.30,"gamma":0.05,"delta":0.10,"exclusions":["cenotes","reservas"]},
-        "ia_optimo":  {"alpha":0.55,"beta":0.25,"gamma":0.15,"delta":0.05,"exclusions":["cenotes","reservas","lst_hotspots","karst_alta"]},
+        "no_plan":    {"alpha":0.60,"beta":0.30,"gamma":0.00,"delta":0.10,
+                       "exclusions":[], "growth_rate": 0.035},
+        "plan_trad":  {"alpha":0.55,"beta":0.30,"gamma":0.05,"delta":0.10,
+                       "exclusions":["cenotes","reservas"], "growth_rate": 0.031},
+        "ia_optimo":  {"alpha":0.55,"beta":0.25,"gamma":0.15,"delta":0.05,
+                       "exclusions":["cenotes","reservas","lst_hotspots","karst_alta"],
+                       "growth_rate": 0.027},
     },
 }
 
