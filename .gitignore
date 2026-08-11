@@ -1,0 +1,16 @@
+# Datos y resultados generados por el pipeline
+data/
+models/
+results/
+demo_output/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Sistema / editor
+.DS_Store
+
+# Herramienta (Codebuff)
+.freebuff/

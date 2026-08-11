@@ -1,2 +1,0 @@
-auc_roc,f1_score,kappa,fom,oob_score,cv_auc_mean,cv_auc_std
-0.9969,0.6732,0.6691,0.5074,0.9912,0.9921,0.0042

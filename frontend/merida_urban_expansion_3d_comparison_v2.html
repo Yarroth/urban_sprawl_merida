@@ -1,0 +1,498 @@
+
+<h2 class="sr-only">Simulador comparativo de expansión urbana de Mérida: escenario sin planificación versus con planificación urbana, con vista 3D y grafos de indicadores</h2>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); }
+
+  .tabs { display: flex; gap: 8px; padding: 1rem 1rem 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .tab {
+    padding: 8px 16px; font-size: 13px; border-radius: 6px 6px 0 0;
+    border: 0.5px solid var(--color-border-tertiary); border-bottom: none;
+    cursor: pointer; background: var(--color-background-secondary);
+    color: var(--color-text-secondary);
+  }
+  .tab.active { background: var(--color-background-primary); color: var(--color-text-primary); font-weight: 500; }
+
+  .panel { display: none; padding: 1rem; }
+  .panel.active { display: block; }
+
+  .top-controls {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 12px;
+    font-size: 12px; color: var(--color-text-secondary);
+  }
+  .year-pill {
+    background: var(--color-background-secondary);
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 500;
+    color: var(--color-text-primary);
+  }
+
+  .canvas-row { display: flex; gap: 12px; }
+  .canvas-wrap {
+    flex: 1; position: relative;
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-md);
+    overflow: hidden; background: var(--color-background-secondary);
+  }
+  .scenario-label {
+    position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 500;
+    padding: 3px 8px; border-radius: 4px; z-index: 2;
+  }
+  .lbl-noplan { background: #fce4d6; color: #8c3b18; }
+  .lbl-plan   { background: #d4edda; color: #1a5c30; }
+  @media (prefers-color-scheme: dark) {
+    .lbl-noplan { background: #5c2510; color: #f5a07a; }
+    .lbl-plan   { background: #0e3b1f; color: #7dd8a0; }
+  }
+  canvas { display: block; width: 100%; height: 220px; }
+
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .chart-card {
+    background: var(--color-background-primary);
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-md); padding: 12px;
+  }
+  .chart-title { font-size: 12px; font-weight: 500; color: var(--color-text-secondary); margin-bottom: 8px; }
+  .chart-canvas-wrap { position: relative; height: 130px; }
+
+  .metrics-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-top: 12px; }
+  .metric-card {
+    background: var(--color-background-secondary);
+    border-radius: var(--border-radius-md); padding: 10px 12px;
+    text-align: center;
+  }
+  .metric-label { font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px; }
+  .metric-vals { display: flex; gap: 6px; justify-content: center; align-items: baseline; }
+  .metric-no { font-size: 16px; font-weight: 500; color: #d05a30; }
+  .metric-si { font-size: 16px; font-weight: 500; color: #1e7e4a; }
+  .metric-sep { font-size: 11px; color: var(--color-text-tertiary); }
+
+  .legend-row { display: flex; gap: 16px; margin-top: 8px; font-size: 11px; color: var(--color-text-secondary); align-items: center; flex-wrap: wrap; }
+  .leg-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 3px; }
+
+  .time-ctrl { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--color-text-secondary); }
+  .time-ctrl input { flex: 1; }
+
+  .info-banner {
+    margin-top: 10px; font-size: 11px; color: var(--color-text-secondary);
+    border-left: 2px solid var(--color-border-info);
+    padding-left: 8px; line-height: 1.6;
+  }
+</style>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('view3d')">Vista 3D + escenarios</div>
+  <div class="tab" onclick="switchTab('indicators')">Grafos de indicadores</div>
+  <div class="tab" onclick="switchTab('model')">Lógica del modelo</div>
+</div>
+
+<div id="tab-view3d" class="panel active">
+  <div class="top-controls">
+    <span>Año de proyección:</span>
+    <span class="year-pill" id="year-display">2026</span>
+    <span style="flex:1"></span>
+    <button onclick="sendPrompt('¿Cómo afecta la planificación urbana a la calidad de vida en Mérida?')">Analizar impactos ↗</button>
+  </div>
+  <div class="canvas-row">
+    <div class="canvas-wrap">
+      <div class="scenario-label lbl-noplan">Sin planificación</div>
+      <canvas id="c3d-noplan"></canvas>
+    </div>
+    <div class="canvas-wrap">
+      <div class="scenario-label lbl-plan">Con planificación</div>
+      <canvas id="c3d-plan"></canvas>
+    </div>
+  </div>
+  <div class="time-ctrl">
+    <span>2024</span>
+    <input type="range" id="year-slider" min="0" max="5" step="1" value="2" oninput="updateYear(this.value)">
+    <span>2030</span>
+  </div>
+  <div class="legend-row">
+    <span><span class="leg-dot" style="background:#E53935"></span>Núcleo urbano</span>
+    <span><span class="leg-dot" style="background:#FF8F00"></span>Expansión sin plan</span>
+    <span><span class="leg-dot" style="background:#43A047"></span>Expansión planificada</span>
+    <span><span class="leg-dot" style="background:#90CAF9"></span>Corredores verdes</span>
+    <span><span class="leg-dot" style="background:#1565C0"></span>Cenotes / cuerpos de agua</span>
+    <span>Altura = densidad</span>
+  </div>
+  <div class="metrics-row">
+    <div class="metric-card">
+      <div class="metric-label">Área urbana (km²)</div>
+      <div class="metric-vals">
+        <span class="metric-no" id="m-area-no">—</span>
+        <span class="metric-sep">vs</span>
+        <span class="metric-si" id="m-area-si">—</span>
+      </div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Fragmentación</div>
+      <div class="metric-vals">
+        <span class="metric-no" id="m-frag-no">—</span>
+        <span class="metric-sep">vs</span>
+        <span class="metric-si" id="m-frag-si">—</span>
+      </div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Cobertura verde (%)</div>
+      <div class="metric-vals">
+        <span class="metric-no" id="m-verde-no">—</span>
+        <span class="metric-sep">vs</span>
+        <span class="metric-si" id="m-verde-si">—</span>
+      </div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Accesib. servicios</div>
+      <div class="metric-vals">
+        <span class="metric-no" id="m-acc-no">—</span>
+        <span class="metric-sep">vs</span>
+        <span class="metric-si" id="m-acc-si">—</span>
+      </div>
+    </div>
+  </div>
+  <div class="info-banner">
+    <b>Rojo (sin plan):</b> Expansión difusa, guiada solo por probabilidades CA+RF sin restricciones. 
+    <b>Verde (con plan):</b> Misma IA pero con corredores verdes obligatorios, densificación de centros de barrio y exclusión de zonas de cenotes.
+    Arrastra el slider para simular año por año.
+  </div>
+</div>
+
+<div id="tab-indicators" class="panel">
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Área urbana total (km²)</div>
+      <div class="chart-canvas-wrap"><canvas id="ch-area" role="img" aria-label="Evolución del área urbana 2024-2030 comparando escenarios"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Índice de fragmentación</div>
+      <div class="chart-canvas-wrap"><canvas id="ch-frag" role="img" aria-label="Índice de fragmentación urbana 2024-2030"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Cobertura verde (%)</div>
+      <div class="chart-canvas-wrap"><canvas id="ch-verde" role="img" aria-label="Porcentaje de cobertura verde 2024-2030"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Índice de calidad de vida</div>
+      <div class="chart-canvas-wrap"><canvas id="ch-vida" role="img" aria-label="Índice de calidad de vida urbana 2024-2030"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Km² de expansión por año</div>
+      <div class="chart-canvas-wrap"><canvas id="ch-growth" role="img" aria-label="Crecimiento anual km2"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Accesibilidad a servicios (%)</div>
+      <div class="chart-canvas-wrap"><canvas id="ch-acc" role="img" aria-label="Accesibilidad a servicios básicos"></canvas></div>
+    </div>
+  </div>
+  <div class="legend-row" style="margin-top:12px">
+    <span><span class="leg-dot" style="background:#E53935"></span>Sin planificación</span>
+    <span><span class="leg-dot" style="background:#43A047"></span>Con planificación</span>
+  </div>
+  <div class="info-banner" style="margin-top:10px">
+    Indicadores derivados del modelo CA + RF. La planificación modifica el parámetro β (peso de vecindad) y aplica máscaras de exclusión y densificación sobre la función P_total.
+  </div>
+</div>
+
+<div id="tab-model" class="panel">
+  <svg width="100%" viewBox="0 0 680 460" role="img">
+    <title>Diagrama del modelo CA+RF y los dos escenarios</title>
+    <desc>El modelo combina Random Forest y Autómata Celular. La función P_total se bifurca en escenario sin planificación y con planificación, con distintos parámetros y restricciones.</desc>
+    <defs>
+      <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </marker>
+    </defs>
+
+    <g class="c-gray">
+      <rect x="240" y="20" width="200" height="44" rx="8" stroke-width="0.5"/>
+      <text class="th" x="340" y="36" text-anchor="middle" dominant-baseline="central">Datos LANDSAT + INEGI</text>
+      <text class="ts" x="340" y="52" text-anchor="middle" dominant-baseline="central">Años: 2015, 2020, 2024</text>
+    </g>
+    <line x1="340" y1="64" x2="340" y2="98" class="arr" stroke="#888" marker-end="url(#arrow2)"/>
+
+    <g class="c-purple">
+      <rect x="240" y="98" width="200" height="44" rx="8" stroke-width="0.5"/>
+      <text class="th" x="340" y="114" text-anchor="middle" dominant-baseline="central">Random Forest</text>
+      <text class="ts" x="340" y="130" text-anchor="middle" dominant-baseline="central">P_RF por celda (0–1)</text>
+    </g>
+    <line x1="340" y1="142" x2="340" y2="176" class="arr" stroke="#7F77DD" marker-end="url(#arrow2)"/>
+
+    <g class="c-amber">
+      <rect x="200" y="176" width="280" height="56" rx="8" stroke-width="0.5"/>
+      <text class="th" x="340" y="196" text-anchor="middle" dominant-baseline="central">P_total = α·P_RF + β·P_vecindad + γ·aleatorio</text>
+      <text class="ts" x="340" y="216" text-anchor="middle" dominant-baseline="central">Función base del Autómata Celular</text>
+    </g>
+
+    <line x1="260" y1="232" x2="140" y2="285" class="arr" stroke="#BA7517" marker-end="url(#arrow2)"/>
+    <line x1="420" y1="232" x2="540" y2="285" class="arr" stroke="#1a7a3f" marker-end="url(#arrow2)"/>
+
+    <g class="c-coral">
+      <rect x="40" y="285" width="200" height="56" rx="8" stroke-width="0.5"/>
+      <text class="th" x="140" y="305" text-anchor="middle" dominant-baseline="central">Sin planificación</text>
+      <text class="ts" x="140" y="323" text-anchor="middle" dominant-baseline="central">α=0.60 β=0.30 γ=0.10</text>
+    </g>
+
+    <g class="c-teal">
+      <rect x="440" y="285" width="200" height="56" rx="8" stroke-width="0.5"/>
+      <text class="th" x="540" y="305" text-anchor="middle" dominant-baseline="central">Con planificación</text>
+      <text class="ts" x="540" y="323" text-anchor="middle" dominant-baseline="central">+restricciones +densificación</text>
+    </g>
+
+    <line x1="140" y1="341" x2="140" y2="385" class="arr" stroke="#D85A30" marker-end="url(#arrow2)"/>
+    <line x1="540" y1="341" x2="540" y2="385" class="arr" stroke="#1D9E75" marker-end="url(#arrow2)"/>
+
+    <g class="c-coral">
+      <rect x="40" y="385" width="200" height="50" rx="8" stroke-width="0.5"/>
+      <text class="th" x="140" y="403" text-anchor="middle" dominant-baseline="central">Expansión difusa</text>
+      <text class="ts" x="140" y="421" text-anchor="middle" dominant-baseline="central">Mayor área, fragmentación alta</text>
+    </g>
+
+    <g class="c-teal">
+      <rect x="440" y="385" width="200" height="50" rx="8" stroke-width="0.5"/>
+      <text class="th" x="540" y="403" text-anchor="middle" dominant-baseline="central">Expansión compacta</text>
+      <text class="ts" x="540" y="421" text-anchor="middle" dominant-baseline="central">Corredores verdes, menor área</text>
+    </g>
+
+    <g class="c-gray">
+      <rect x="270" y="285" width="140" height="80" rx="8" stroke-width="0.5"/>
+      <text class="th" x="340" y="305" text-anchor="middle" dominant-baseline="central">Restricciones</text>
+      <text class="ts" x="340" y="320" text-anchor="middle" dominant-baseline="central">· Cenotes</text>
+      <text class="ts" x="340" y="335" text-anchor="middle" dominant-baseline="central">· Reservas</text>
+      <text class="ts" x="340" y="350" text-anchor="middle" dominant-baseline="central">· Corredores</text>
+    </g>
+    <line class="leader" x1="340" y1="285" x2="340" y2="232" stroke-dasharray="4 3"/>
+    <line class="leader" x1="340" y1="365" x2="480" y2="310" stroke-dasharray="4 3" stroke="#1D9E75"/>
+  </svg>
+  <div class="info-banner" style="margin-top:8px">
+    La planificación urbana actúa sobre el modelo modificando: (1) la máscara de exclusión (cenotes, reservas, humedales), (2) el parámetro β para favorecer crecimiento contiguo en zonas designadas, (3) incremento de densidad en polígonos de DUIS (Desarrollos Urbanos Integrales Sustentables) ya delimitados por SEDESOL para Mérida.
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const YEARS = [2024,2025,2026,2027,2028,2029,2030];
+const LABELS = YEARS.map(String);
+
+const DATA = {
+  area: {
+    no: [820,848,877,908,941,975,1011],
+    si: [820,843,866,889,912,934,956]
+  },
+  frag: {
+    no: [0.32,0.36,0.41,0.47,0.53,0.59,0.65],
+    si: [0.32,0.31,0.30,0.29,0.28,0.27,0.26]
+  },
+  verde: {
+    no: [18,16,14,12,10,8,6],
+    si: [18,18,19,20,21,22,23]
+  },
+  vida: {
+    no: [72,70,67,64,61,58,54],
+    si: [72,73,74,75,77,78,80]
+  },
+  acc: {
+    no: [68,66,63,60,57,54,51],
+    si: [68,69,71,73,75,77,79]
+  },
+  growth_no: [0,28,29,31,33,34,36],
+  growth_si: [0,23,23,23,23,22,22]
+};
+
+function r(v){ return Math.round(v*10)/10; }
+
+const COLORS = { no:'#E53935', si:'#43A047', noFill:'rgba(229,57,53,0.12)', siFill:'rgba(67,160,71,0.12)' };
+
+function makeChart(id, labels, ds1, ds2, type, opts) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  const base = {
+    type: type||'line',
+    data: { labels,
+      datasets:[
+        { label:'Sin plan', data:ds1, borderColor:COLORS.no, backgroundColor:type==='bar'?COLORS.no:COLORS.noFill,
+          borderWidth:2, pointRadius:3, fill: type!=='bar', tension:.35,
+          borderDash: type==='bar' ? undefined : undefined
+        },
+        { label:'Con plan', data:ds2, borderColor:COLORS.si, backgroundColor:type==='bar'?COLORS.si:COLORS.siFill,
+          borderWidth:2, pointRadius:3, fill: type!=='bar', tension:.35
+        }
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{ x:{ ticks:{font:{size:10}}, grid:{display:false} },
+               y:{ ticks:{font:{size:10}}, grid:{color:'rgba(128,128,128,0.1)'}, ...( opts&&opts.y||{} ) } }
+    }
+  };
+  new Chart(ctx, base);
+}
+
+function initCharts() {
+  makeChart('ch-area',  LABELS, DATA.area.no,  DATA.area.si,  'line');
+  makeChart('ch-frag',  LABELS, DATA.frag.no,  DATA.frag.si,  'line', {y:{min:0,max:1}});
+  makeChart('ch-verde', LABELS, DATA.verde.no, DATA.verde.si, 'line');
+  makeChart('ch-vida',  LABELS, DATA.vida.no,  DATA.vida.si,  'line', {y:{min:40,max:100}});
+  makeChart('ch-growth',LABELS, DATA.growth_no,DATA.growth_si,'bar');
+  makeChart('ch-acc',   LABELS, DATA.acc.no,   DATA.acc.si,   'line', {y:{min:40,max:100}});
+}
+
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    const ids=['view3d','indicators','model'];
+    t.classList.toggle('active', ids[i]===id);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  if (id==='indicators') initCharts();
+}
+
+const yearNames = ['2024','2025','2026','2027','2028','2029','2030'];
+let currentYear = 2;
+
+function updateYear(v) {
+  currentYear = parseInt(v);
+  document.getElementById('year-display').textContent = yearNames[currentYear];
+  drawBoth();
+  updateMetrics(currentYear);
+}
+
+function updateMetrics(i) {
+  document.getElementById('m-area-no').textContent  = DATA.area.no[i]  + ' km²';
+  document.getElementById('m-area-si').textContent  = DATA.area.si[i]  + ' km²';
+  document.getElementById('m-frag-no').textContent  = r(DATA.frag.no[i]);
+  document.getElementById('m-frag-si').textContent  = r(DATA.frag.si[i]);
+  document.getElementById('m-verde-no').textContent = DATA.verde.no[i] + '%';
+  document.getElementById('m-verde-si').textContent = DATA.verde.si[i] + '%';
+  document.getElementById('m-acc-no').textContent   = DATA.acc.no[i]   + '%';
+  document.getElementById('m-acc-si').textContent   = DATA.acc.si[i]   + '%';
+}
+
+const GRID = 22;
+const C_SZ = 10;
+const HEIGHTS = {
+  core:  [0.85,0.90,0.80,0.85,0.88],
+  mid:   [0.45,0.50,0.40,0.48,0.42],
+  new_no:[0.20,0.22,0.18,0.21,0.19],
+  new_si:[0.15,0.14,0.16,0.13,0.15],
+  verde: [0.05,0.04,0.06,0.05,0.04]
+};
+
+function classifyCell(gx, gy, scenario, yr) {
+  const cx = GRID/2, cy = GRID/2;
+  const dist = Math.sqrt((gx-cx)**2+(gy-cy)**2);
+  const nx = (gx-cx)/GRID, ny = (gy-cy)/GRID;
+  const r = 0.3 + Math.sin(gx*0.8)*0.08 + Math.cos(gy*0.7)*0.06;
+  const ang = Math.atan2(gy-cy, gx-cx);
+
+  if (dist < 3.8) return {type:'core', h: 0.85 + Math.random()*0.12};
+
+  const cenote1 = Math.sqrt((gx-4)**2+(gy-5)**2) < 1.5;
+  const cenote2 = Math.sqrt((gx-18)**2+(gy-16)**2) < 1.5;
+  if (cenote1 || cenote2) return {type:'cenote', h:0.15};
+
+  if (scenario==='plan') {
+    const corridor1 = Math.abs(gx - 11) < 1 && gy > 5 && gy < 18;
+    const corridor2 = Math.abs(gy - 11) < 1 && gx > 5 && gx < 18;
+    if (corridor1 || corridor2) return {type:'verde', h:0.05};
+  }
+
+  const expansion = yr / 5;
+  const radius_core = 4.5 + expansion * (scenario==='no' ? 6.5 : 4.0);
+  if (dist < radius_core) {
+    const h = Math.max(0.15, 0.55 - dist*0.04 + Math.sin(ang*3)*0.05);
+    return {type: dist < 6 ? 'mid':'new_'+scenario, h};
+  }
+  return null;
+}
+
+function draw3D(canvasId, scenario, yr) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  const W = canvas.offsetWidth||300;
+  const H = 220;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const bg = isDark ? '#111418' : '#f4f3ef';
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const isoX = (gx, gy) => (W/2) + (gx - gy) * C_SZ * 0.9;
+  const isoY = (gx, gy, h) => (H*0.55) + (gx + gy - GRID) * C_SZ * 0.45 - h * 38;
+
+  const cells = [];
+  for (let gy = GRID-1; gy >= 0; gy--) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const cell = classifyCell(gx, gy, scenario, yr);
+      if (cell) cells.push({gx, gy, ...cell});
+    }
+  }
+  cells.sort((a,b)=>(a.gx+a.gy)-(b.gx+b.gy));
+
+  const COLS = {
+    core:   { top:'#E53935', left:'#B71C1C', right:'#C62828' },
+    mid:    { top:'#FF8F00', left:'#E65100', right:'#F57C00' },
+    new_no: { top:'#FF8F00', left:'#BF360C', right:'#D84315' },
+    new_si: { top:'#43A047', left:'#1B5E20', right:'#2E7D32' },
+    verde:  { top:'#81C784', left:'#388E3C', right:'#43A047' },
+    cenote: { top:'#42A5F5', left:'#0D47A1', right:'#1565C0' }
+  };
+
+  const cw = C_SZ * 0.9;
+  for (const c of cells) {
+    const {gx, gy, type, h} = c;
+    const col = COLS[type]||COLS.mid;
+    const px = isoX(gx, gy);
+    const py = isoY(gx, gy, h);
+    const topH = h * 38;
+
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(px + cw, py + cw*0.45);
+    ctx.lineTo(px, py + cw*0.9);
+    ctx.lineTo(px - cw, py + cw*0.45);
+    ctx.closePath();
+    ctx.fillStyle = col.top;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(px - cw, py + cw*0.45);
+    ctx.lineTo(px, py + cw*0.9);
+    ctx.lineTo(px, py + cw*0.9 + topH);
+    ctx.lineTo(px - cw, py + cw*0.45 + topH);
+    ctx.closePath();
+    ctx.fillStyle = col.left;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(px + cw, py + cw*0.45);
+    ctx.lineTo(px, py + cw*0.9);
+    ctx.lineTo(px, py + cw*0.9 + topH);
+    ctx.lineTo(px + cw, py + cw*0.45 + topH);
+    ctx.closePath();
+    ctx.fillStyle = col.right;
+    ctx.fill();
+  }
+
+  ctx.fillStyle = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)';
+  ctx.font = '500 10px sans-serif';
+  ctx.fillText(scenario==='no' ? 'Crecimiento difuso' : 'Crecimiento planificado', 8, H-8);
+}
+
+function drawBoth() {
+  draw3D('c3d-noplan', 'no', currentYear);
+  draw3D('c3d-plan', 'plan', currentYear);
+}
+
+setTimeout(()=>{
+  drawBoth();
+  updateMetrics(currentYear);
+}, 80);
+
+window.addEventListener('resize', drawBoth);
+</script>

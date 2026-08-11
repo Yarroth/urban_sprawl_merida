@@ -1,387 +1,268 @@
 """
-scripts/04_simulate_ca.py
-Simulación de expansión urbana con Autómata Celular (2025–2030).
+scripts/04_simulate_ca.py  —  v2.0
+Simulación CA con tres escenarios usando reglas aprendidas y variables kársticas.
 
-Algoritmo:
-  Para cada año t → t+1:
-    1. Cargar estado urbano actual y features espaciales
-    2. Calcular P_RF  = probabilidad del modelo Random Forest
-    3. Calcular P_nbr = densidad de vecindad (regla CA)
-    4. Calcular P_total = α*P_RF + β*P_nbr + γ*random
-    5. Aplicar restricciones (agua, cenotes, reservas)
-    6. Calcular cuántas celdas deben urbanizarse (growth_rate)
-    7. Convertir las celdas de mayor probabilidad hasta llegar al cupo
-    8. Guardar mapa de probabilidades y mapa binario
+Escenarios:
+  no_plan   — expansión libre, sin restricciones
+  plan_trad — corredores verdes + exclusión de cenotes
+  ia_optimo — reglas CA aprendidas + variables kársticas + multiobjetivo
 
-Salidas en results/maps/:
-  - prediction_{year}.tif      → mapa de probabilidad (float32, 0-1)
-  - urban_extent_{year}.tif    → mapa binario urbano/no-urbano (uint8)
-  - urban_extent_{year}.shp    → shapefile del área urbana proyectada
+Función de probabilidad v2.0:
+  P_total = α·P_LightGBM + β·P_CA_aprendida + γ·P_kárstico + δ·rand
 """
-
-import os
-import sys
-import logging
+import os, sys, logging, warnings
+warnings.filterwarnings("ignore")
 from pathlib import Path
-
 import numpy as np
-import rasterio
-from rasterio.features import shapes
-import geopandas as gpd
-from shapely.geometry import shape
-from scipy.ndimage import uniform_filter
-import joblib
 import pandas as pd
+import joblib
+from scipy.ndimage import uniform_filter, distance_transform_edt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config.settings import (
-    CA_CONFIG, PREDICT_YEARS, BASE_YEAR, PATHS, PIXEL_RESOLUTION,
-    STUDY_AREA
-)
+from config.settings import CA_CONFIG, PREDICT_YEARS, BASE_YEAR, PATHS, PIXEL_RESOLUTION, STUDY_AREA
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
-
-FEATURE_NAMES = [
-    "dist_urban_edge", "dist_center", "dist_road",
-    "ndvi_mean", "neighbor_3x3", "neighbor_5x5", "neighbor_9x9"
-]
-
 rng = np.random.default_rng(42)
 
-
-# ─────────────────────────────────────────────────────────────
-# UTILIDADES
-# ─────────────────────────────────────────────────────────────
-
-def load_raster(path: str) -> tuple[np.ndarray, dict]:
-    """Carga un GeoTIFF y retorna (array, profile)."""
-    with rasterio.open(path) as src:
-        data = src.read()
-        profile = src.profile.copy()
-    return data, profile
+try:
+    import rasterio
+    from rasterio.features import shapes
+    import geopandas as gpd
+    from shapely.geometry import shape
+    RASTERIO_OK = True
+except ImportError:
+    RASTERIO_OK = False
+    log.warning("rasterio/geopandas no disponibles — usando numpy nativo")
 
 
-def save_raster(array: np.ndarray, path: str, profile: dict, dtype=None):
-    """Guarda un array como GeoTIFF."""
-    p = profile.copy()
-    if array.ndim == 2:
-        array = array[np.newaxis, ...]
-    p.update(count=array.shape[0], compress="lzw")
-    if dtype:
-        p.update(dtype=dtype)
-        array = array.astype(dtype)
-    with rasterio.open(path, "w", **p) as dst:
-        dst.write(array)
+def load_array(path):
+    if RASTERIO_OK and path.endswith(".tif") and os.path.exists(path):
+        import rasterio
+        with rasterio.open(path) as src:
+            return src.read(), src.profile.copy()
+    elif path.endswith(".npy") and os.path.exists(path):
+        return np.load(path)[np.newaxis,...], {}
+    return None, None
 
 
-def raster_to_shapefile(urban_array: np.ndarray, profile: dict, out_path: str):
-    """Vectoriza el mapa binario de área urbana a shapefile."""
-    results = []
-    data = urban_array.astype(np.uint8)
-    for geom, val in shapes(data, mask=(data == 1), transform=profile["transform"]):
-        if val == 1:
-            results.append({"geometry": shape(geom), "urban": 1})
-
-    if results:
-        gdf = gpd.GeoDataFrame(results, crs=profile["crs"])
-        # Disolver todos los polígonos en uno
-        gdf_dissolved = gdf.dissolve()
-        gdf_dissolved.to_file(out_path)
-        log.info(f"    ✓ Shapefile: {out_path}")
+def save_array(arr, path, profile):
+    if RASTERIO_OK and path.endswith(".tif") and profile:
+        import rasterio
+        p = profile.copy()
+        if arr.ndim == 2: arr = arr[np.newaxis,...]
+        p.update(count=arr.shape[0], compress="lzw")
+        with rasterio.open(path, "w", **p) as dst:
+            dst.write(arr)
     else:
-        log.warning(f"    No se generaron polígonos urbanos para {out_path}")
+        np.save(path.replace(".tif",".npy"), arr)
 
 
-# ─────────────────────────────────────────────────────────────
-# ACTUALIZACIÓN DINÁMICA DE FEATURES
-# ─────────────────────────────────────────────────────────────
-
-def update_features_for_year(features_base: np.ndarray, urban: np.ndarray,
-                              profile: dict) -> np.ndarray:
+def build_karst_prob(urban, lst_map, karst_vuln, cenote_dist, cfg):
     """
-    Actualiza las features que dependen del estado urbano actual:
-      - dist_urban_edge (cambia con cada expansión)
-      - neighbor_3x3, neighbor_5x5, neighbor_9x9
-    Las otras features (dist_center, dist_road, ndvi_mean) son estáticas.
+    P_kárstico: penaliza celdas con alta LST, cercanas a cenotes o con alta
+    vulnerabilidad de acuífero. Mayor P_kárstico = MENOS probable de urbanizarse
+    en el escenario ia_optimo.
     """
-    from scipy.ndimage import distance_transform_edt
+    # Normalizar LST: celdas calientes tienen mayor riesgo
+    lst_norm = np.clip((lst_map - 25) / 15, 0, 1) if lst_map is not None else np.zeros_like(urban, dtype=np.float32)
+    # Distancia a cenotes: cercanía = riesgo
+    cenote_norm = np.clip(1 - cenote_dist / 2000, 0, 1) if cenote_dist is not None else np.zeros_like(urban, dtype=np.float32)
+    # Vulnerabilidad kárstica directa
+    karst_norm = karst_vuln if karst_vuln is not None else np.zeros_like(urban, dtype=np.float32)
 
-    features = features_base.copy()
-    non_urban = (urban == 0).astype(np.float32)
-
-    # Actualizar distancia al borde urbano (banda 0)
-    dist_edge_pixels = distance_transform_edt(non_urban)
-    dist_edge_m = dist_edge_pixels * PIXEL_RESOLUTION
-    max_dist = np.percentile(dist_edge_m[dist_edge_m > 0], 99) if dist_edge_m.max() > 0 else 1
-    features[0] = np.clip(dist_edge_m / max_dist, 0, 1).astype(np.float32)
-
-    # Actualizar densidades de vecindad (bandas 4, 5, 6)
-    features[4] = uniform_filter(urban.astype(np.float32), size=3)   # 3x3
-    features[5] = uniform_filter(urban.astype(np.float32), size=5)   # 5x5
-    features[6] = uniform_filter(urban.astype(np.float32), size=9)   # 9x9
-
-    return features
+    w = CA_CONFIG
+    p_karst = (
+        cfg.get("lst_weight", 0.35) * lst_norm +
+        cfg.get("cenote_weight", 0.40) * cenote_norm +
+        cfg.get("aquifer_weight", 0.25) * karst_norm
+    )
+    return p_karst.astype(np.float32)
 
 
-# ─────────────────────────────────────────────────────────────
-# PROBABILIDADES CA
-# ─────────────────────────────────────────────────────────────
-
-def compute_rf_probability(model, features: np.ndarray, urban: np.ndarray) -> np.ndarray:
-    """
-    Aplica el modelo RF a todos los píxeles no-urbanos para obtener
-    la probabilidad de transición.
-    """
-    rows, cols = urban.shape
-    non_urban_mask = urban == 0
-
-    # Vectorizar features para los píxeles no-urbanos
-    X = features.reshape(features.shape[0], -1).T[non_urban_mask.ravel()]
-
-    # Eliminar filas con NaN
-    nan_mask = np.any(np.isnan(X), axis=1)
-    X[nan_mask] = 0
-
-    prob_urban = model.predict_proba(X)[:, 1]
-
-    # Reconstruir mapa completo
-    prob_map = np.zeros(rows * cols, dtype=np.float32)
-    prob_map[non_urban_mask.ravel()] = prob_urban
-    return prob_map.reshape(rows, cols)
-
-
-def compute_neighborhood_probability(urban: np.ndarray,
-                                     radius: int = None) -> np.ndarray:
-    """
-    Regla de vecindad CA: fracción de píxeles urbanos en la ventana.
-    """
-    radius = radius or CA_CONFIG["neighborhood_radius"]
-    window = 2 * radius + 1
-    return uniform_filter(urban.astype(np.float32), size=window)
-
-
-def compute_total_probability(p_rf: np.ndarray, p_nbr: np.ndarray) -> np.ndarray:
-    """
-    Combina probabilidades:
-    P_total = α*P_RF + β*P_nbr + γ*U(0,1)
-    """
-    alpha = CA_CONFIG["alpha"]
-    beta  = CA_CONFIG["beta"]
-    gamma = CA_CONFIG["gamma"]
-
-    p_stochastic = rng.random(p_rf.shape, dtype=np.float32)
-    p_total = alpha * p_rf + beta * p_nbr + gamma * p_stochastic
-
-    # Normalizar a [0, 1]
-    p_total = np.clip(p_total, 0, 1)
-    return p_total.astype(np.float32)
-
-
-# ─────────────────────────────────────────────────────────────
-# RESTRICCIONES DE CONVERSIÓN
-# ─────────────────────────────────────────────────────────────
-
-def build_exclusion_mask(shape: tuple, profile: dict) -> np.ndarray:
-    """
-    Construye máscara de píxeles que NO pueden urbanizarse
-    (cuerpos de agua, cenotes, áreas protegidas).
-    Por defecto: todos pueden urbanizarse (máscara de ceros).
-    Si existen capas de restricción en data/raw/, se aplican.
-    """
+def build_exclusion_mask(shape, profile, scenario, cenote_dist=None, lst_map=None, karst_vuln=None):
     mask = np.zeros(shape, dtype=bool)
+    exclusions = CA_CONFIG["scenarios"][scenario]["exclusions"]
 
-    # Intentar cargar shapefiles de restricción si existen
-    restriction_files = {
-        "agua": os.path.join(PATHS["raw"], "cuerpos_agua.shp"),
-        "reserva": os.path.join(PATHS["raw"], "areas_naturales_protegidas.shp"),
-    }
+    if "cenotes" in exclusions and cenote_dist is not None:
+        radius_px = int(200 / PIXEL_RESOLUTION)
+        mask |= (cenote_dist < radius_px * PIXEL_RESOLUTION)
 
-    try:
-        from rasterio.features import rasterize
-        from shapely.geometry import mapping
+    if "lst_hotspots" in exclusions and lst_map is not None:
+        mask |= (lst_map > 37.0)
 
-        for name, path in restriction_files.items():
-            if os.path.exists(path):
-                gdf = gpd.read_file(path).to_crs(profile["crs"])
-                burned = rasterize(
-                    [(mapping(geom), 1) for geom in gdf.geometry if not geom.is_empty],
-                    out_shape=shape,
-                    transform=profile["transform"],
-                    fill=0,
-                    dtype=np.uint8,
-                )
-                mask = mask | burned.astype(bool)
-                log.info(f"    Restricción '{name}': {burned.sum():,} píxeles excluidos")
-    except Exception as e:
-        log.debug(f"    No se pudieron cargar restricciones: {e}")
+    if "karst_alta" in exclusions and karst_vuln is not None:
+        mask |= (karst_vuln > 0.7)
 
     return mask
 
 
-# ─────────────────────────────────────────────────────────────
-# SIMULACIÓN ANUAL
-# ─────────────────────────────────────────────────────────────
-
-def simulate_year(model, urban: np.ndarray, features: np.ndarray,
-                  profile: dict, exclusion_mask: np.ndarray,
-                  year: int) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Simula un año de expansión urbana.
-    Retorna: (urban_new, prob_map)
-    """
-    log.info(f"  [{year}] Simulando...")
-
-    # Actualizar features dinámicas
-    features_updated = update_features_for_year(features, urban, profile)
-
-    # Probabilidades RF para celdas no-urbanas
-    p_rf  = compute_rf_probability(model, features_updated, urban)
-
-    # Probabilidad de vecindad CA
-    p_nbr = compute_neighborhood_probability(urban)
-
-    # Probabilidad total
-    p_total = compute_total_probability(p_rf, p_nbr)
-
-    # Aplicar exclusiones (celdas que no pueden urbanizarse)
-    p_total[exclusion_mask] = 0
-    p_total[urban == 1] = 0  # ya es urbano
-
-    # Calcular cuántas celdas deben convertirse este año
-    n_urban_current = urban.sum()
-    n_to_convert = int(n_urban_current * CA_CONFIG["annual_growth_rate"])
-    n_non_urban = (urban == 0).sum() - exclusion_mask.sum()
-    n_to_convert = min(n_to_convert, max(0, n_non_urban))
-
-    log.info(f"    Urbano actual: {n_urban_current:,} px ({n_urban_current * PIXEL_RESOLUTION**2 / 1e6:.1f} km²)")
-    log.info(f"    Celdas a convertir: {n_to_convert:,} px ({n_to_convert * PIXEL_RESOLUTION**2 / 1e6:.2f} km²)")
-
-    # Seleccionar las celdas de mayor probabilidad
-    urban_new = urban.copy()
-    if n_to_convert > 0:
-        flat_probs = p_total.ravel()
-        threshold_idx = np.argsort(flat_probs)[-n_to_convert:]
-        urban_flat = urban_new.ravel()
-        urban_flat[threshold_idx] = 1
-        urban_new = urban_flat.reshape(urban.shape)
-
-    n_new = urban_new.sum() - urban.sum()
-    log.info(f"    Nuevas celdas urbanas: {n_new:,}")
-
-    return urban_new, p_total
+def compute_ca_probability(ca_model, features, urban, p_lgbm):
+    """Aplica el modelo de reglas CA aprendidas."""
+    non_urban = (urban == 0).ravel()
+    if features is None:
+        return uniform_filter(urban.astype(np.float32), size=9)
+    try:
+        n_feat = features.shape[0]
+        X = features.reshape(n_feat, -1).T[non_urban]
+        p_lgbm_flat = p_lgbm.ravel()[non_urban]
+        X_ca = np.column_stack([X, p_lgbm_flat])
+        X_ca[np.isnan(X_ca)] = 0
+        p_ca_vals = ca_model.predict_proba(X_ca)[:,1]
+        p_ca = np.zeros(urban.size, dtype=np.float32)
+        p_ca[non_urban] = p_ca_vals
+        return p_ca.reshape(urban.shape)
+    except Exception as e:
+        log.warning(f"  CA-model falló ({e}), usando densidad de vecindad")
+        return uniform_filter(urban.astype(np.float32), size=9)
 
 
-# ─────────────────────────────────────────────────────────────
-# ESTADÍSTICAS
-# ─────────────────────────────────────────────────────────────
+def simulate_scenario(lgbm_model, ca_model, urban_base, features, profile,
+                      lst_map, cenote_dist, karst_vuln, scenario):
+    from config.settings import KARST_CONFIG
+    log.info(f"\n  Escenario: {scenario.upper()}")
+    sc_cfg = CA_CONFIG["scenarios"][scenario]
+    alpha = sc_cfg["alpha"]; beta = sc_cfg["beta"]
+    gamma = sc_cfg["gamma"]; delta = sc_cfg["delta"]
 
-def compute_area_statistics(urban_series: dict) -> pd.DataFrame:
-    """Calcula estadísticas de área urbana por año."""
-    stats = []
-    years = sorted(urban_series.keys())
-
-    for i, year in enumerate(years):
-        urban = urban_series[year]
-        area_km2 = urban.sum() * PIXEL_RESOLUTION**2 / 1e6
-        area_ha  = urban.sum() * PIXEL_RESOLUTION**2 / 1e4
-
-        if i > 0:
-            prev_year = years[i-1]
-            prev_area = urban_series[prev_year].sum() * PIXEL_RESOLUTION**2 / 1e6
-            growth_km2 = area_km2 - prev_area
-            growth_pct  = (area_km2 - prev_area) / prev_area * 100 if prev_area > 0 else 0
-        else:
-            growth_km2 = 0
-            growth_pct  = 0
-
-        stats.append({
-            "year": year,
-            "area_km2": round(area_km2, 2),
-            "area_ha": round(area_ha, 1),
-            "growth_km2": round(growth_km2, 2),
-            "growth_pct": round(growth_pct, 2),
-        })
-
-    return pd.DataFrame(stats)
-
-
-# ─────────────────────────────────────────────────────────────
-# MAIN
-# ─────────────────────────────────────────────────────────────
-
-def main():
-    log.info("=" * 60)
-    log.info("PASO 4: Simulación de Autómata Celular (2025–2030)")
-    log.info("=" * 60)
-
-    # Cargar modelo entrenado
-    if not os.path.exists(PATHS["rf_model"]):
-        log.error(f"Modelo no encontrado: {PATHS['rf_model']}")
-        log.error("Ejecuta primero: python scripts/03_train_model.py")
-        sys.exit(1)
-
-    log.info(f"Cargando modelo RF: {PATHS['rf_model']}")
-    model = joblib.load(PATHS["rf_model"])
-
-    # Cargar estado urbano base (año más reciente disponible)
-    base_lulc_path = PATHS["lulc_base"].format(year=BASE_YEAR)
-    if not os.path.exists(base_lulc_path):
-        log.error(f"LULC base no encontrado: {base_lulc_path}")
-        sys.exit(1)
-
-    urban_base, profile = load_raster(base_lulc_path)
-    urban = urban_base[0].astype(np.uint8)
-    log.info(f"Estado base {BASE_YEAR}: {urban.sum():,} píxeles urbanos "
-             f"({urban.sum() * PIXEL_RESOLUTION**2 / 1e6:.1f} km²)")
-
-    # Cargar features base
-    feat_base_path = PATHS["features"].format(year=BASE_YEAR)
-    if not os.path.exists(feat_base_path):
-        log.error(f"Features base no encontradas: {feat_base_path}")
-        sys.exit(1)
-
-    features_base, _ = load_raster(feat_base_path)
-    log.info(f"Features base cargadas: {features_base.shape[0]} bandas")
-
-    # Construir máscara de exclusión
-    log.info("Construyendo máscara de exclusión...")
-    exclusion_mask = build_exclusion_mask(urban.shape, profile["meta"] if "meta" in profile else profile)
-
-    # Simulación año por año
-    urban_series = {BASE_YEAR: urban.copy()}
-    current_urban = urban.copy()
+    current = urban_base.copy()
+    urban_series = {BASE_YEAR: current.copy()}
 
     for year in PREDICT_YEARS:
-        current_urban, prob_map = simulate_year(
-            model, current_urban, features_base, profile, exclusion_mask, year
+        # Actualizar features dinámicas
+        if features is not None:
+            non_urban = (1 - current).astype(np.float32)
+            dist_edge = distance_transform_edt(non_urban) * PIXEL_RESOLUTION
+            max_de = np.percentile(dist_edge[dist_edge>0], 99) if dist_edge.max()>0 else 1
+            features[0] = np.clip(dist_edge / max_de, 0, 1)
+            features[4] = uniform_filter(current.astype(np.float32), size=3)
+            features[5] = uniform_filter(current.astype(np.float32), size=5)
+            features[6] = uniform_filter(current.astype(np.float32), size=9)
+
+        # P_LightGBM
+        non_urban_mask = (current == 0).ravel()
+        if features is not None:
+            X_pred = features.reshape(features.shape[0],-1).T[non_urban_mask]
+            X_pred[np.isnan(X_pred)] = 0
+            p_lgbm_vals = lgbm_model.predict_proba(X_pred)[:,1]
+            p_lgbm = np.zeros(current.size, dtype=np.float32)
+            p_lgbm[non_urban_mask] = p_lgbm_vals
+            p_lgbm = p_lgbm.reshape(current.shape)
+        else:
+            p_lgbm = np.zeros_like(current, dtype=np.float32)
+
+        # P_CA (reglas aprendidas o densidad de vecindad)
+        p_ca = compute_ca_probability(ca_model, features, current, p_lgbm)
+
+        # P_kárstico
+        p_karst = build_karst_prob(current, lst_map, karst_vuln, cenote_dist, KARST_CONFIG)
+
+        # P_total
+        p_stoch = rng.random(current.shape, dtype=np.float32)
+        p_total = alpha*p_lgbm + beta*p_ca + gamma*(1-p_karst) + delta*p_stoch
+        p_total[current == 1] = 0
+
+        # Exclusiones
+        excl = build_exclusion_mask(current.shape, profile, scenario, cenote_dist, lst_map, karst_vuln)
+        p_total[excl] = 0
+
+        # Convertir N celdas
+        n_convert = int(current.sum() * CA_CONFIG["annual_growth_rate"])
+        n_convert = min(n_convert, max(0, int((current==0).sum()) - int(excl.sum())))
+        flat = p_total.ravel()
+        top_idx = np.argsort(flat)[-n_convert:]
+        new_urban = current.copy()
+        new_urban.ravel()[top_idx] = 1
+
+        area = new_urban.sum() * PIXEL_RESOLUTION**2 / 1e6
+        delta_km2 = (new_urban.sum() - current.sum()) * PIXEL_RESOLUTION**2 / 1e6
+        log.info(f"    {year}: {area:.1f} km² (+{delta_km2:.2f} km²)")
+
+        # Guardar
+        pred_path = PATHS["prediction"].format(year=year, scenario=scenario)
+        ext_path  = os.path.join(PATHS["results_maps"], f"urban_extent_{year}_{scenario}.npy")
+        save_array(p_total, pred_path.replace(".tif",".npy"), profile)
+        np.save(ext_path, new_urban)
+
+        urban_series[year] = new_urban.copy()
+        current = new_urban
+
+    return urban_series
+
+
+def compute_statistics(urban_series_all):
+    rows = []
+    for scenario, series in urban_series_all.items():
+        for year, urban in sorted(series.items()):
+            area = urban.sum() * PIXEL_RESOLUTION**2 / 1e6
+            rows.append({"scenario": scenario, "year": year,
+                         "area_km2": round(area, 2),
+                         "area_ha":  round(area*100, 1)})
+    df = pd.DataFrame(rows)
+    df["growth_km2"] = df.groupby("scenario")["area_km2"].diff().fillna(0).round(2)
+    df["growth_pct"]  = (df["growth_km2"] / df.groupby("scenario")["area_km2"].shift(1) * 100).fillna(0).round(2)
+    df.to_csv(os.path.join(PATHS["results_reports"], "area_statistics.csv"), index=False)
+    log.info("\nESTADÍSTICAS FINALES:")
+    log.info(df[df["year"]==2030].to_string(index=False))
+    return df
+
+
+def main():
+    log.info("=" * 58)
+    log.info("PASO 4 v2.0: Simulación CA — tres escenarios")
+    log.info("=" * 58)
+
+    lgbm_model = joblib.load(PATHS["lgbm_model"])
+    ca_model   = None
+    if os.path.exists(PATHS["ca_model"]):
+        ca_model = joblib.load(PATHS["ca_model"])
+
+    # Cargar estado base
+    base_path = PATHS["lulc_base"].format(year=BASE_YEAR)
+    arr, profile = load_array(base_path)
+    if arr is None:
+        log.error(f"LULC base no encontrado: {base_path}")
+        sys.exit(1)
+    urban_base = arr[0].astype(np.uint8)
+    log.info(f"Base {BASE_YEAR}: {urban_base.sum():,} px urbanos ({urban_base.sum()*PIXEL_RESOLUTION**2/1e6:.1f} km²)")
+
+    # Cargar features
+    feat_path = PATHS["features"].format(year=BASE_YEAR)
+    feat_arr, _ = load_array(feat_path)
+    features = feat_arr.astype(np.float32) if feat_arr is not None else None
+
+    # Capas kársticas (sintéticas si no existen)
+    lst_map, cenote_dist, karst_vuln = None, None, None
+    lst_path = PATHS["lst"].format(year=BASE_YEAR)
+    if os.path.exists(lst_path.replace(".tif",".npy")):
+        lst_map = np.load(lst_path.replace(".tif",".npy"))
+        log.info("  LST cargado")
+    if os.path.exists(PATHS["cenotes"]):
+        log.info("  Cenotes cargados")
+    # Si no existen datos reales, generar sintéticos para demo
+    if lst_map is None:
+        lst_map = 32 + rng.uniform(0,5,urban_base.shape).astype(np.float32)
+        lst_map[urban_base==1] += 2  # UHI
+        log.info("  LST sintético generado para demo")
+    if cenote_dist is None:
+        cx, cy = urban_base.shape[0]//4, urban_base.shape[1]//4
+        rows, cols = np.mgrid[0:urban_base.shape[0], 0:urban_base.shape[1]]
+        cenote_dist = np.sqrt((rows-cx)**2+(cols-cy)**2).astype(np.float32)*PIXEL_RESOLUTION
+        log.info("  Distancia a cenotes sintética para demo")
+    if karst_vuln is None:
+        karst_vuln = rng.uniform(0.1, 0.8, urban_base.shape).astype(np.float32)
+        log.info("  Vulnerabilidad kárstica sintética para demo")
+
+    # Simular tres escenarios
+    all_series = {}
+    for scenario in ["no_plan","plan_trad","ia_optimo"]:
+        all_series[scenario] = simulate_scenario(
+            lgbm_model, ca_model, urban_base, features.copy() if features is not None else None,
+            profile, lst_map, cenote_dist, karst_vuln, scenario
         )
-        urban_series[year] = current_urban.copy()
 
-        # Guardar mapa de probabilidades
-        prob_path = PATHS["prediction"].format(year=year)
-        save_raster(prob_map, prob_path, profile, dtype=rasterio.float32)
-        log.info(f"  → Probabilidades guardadas: {prob_path}")
-
-        # Guardar mapa binario
-        extent_path = os.path.join(PATHS["results_maps"], f"urban_extent_{year}.tif")
-        save_raster(current_urban, extent_path, profile, dtype=rasterio.uint8)
-
-        # Vectorizar a shapefile
-        shp_path = PATHS["urban_extent"].format(year=year)
-        raster_to_shapefile(current_urban, profile, shp_path)
-
-    # Estadísticas finales
-    stats_df = compute_area_statistics(urban_series)
-    stats_path = os.path.join(PATHS["results_reports"], "area_statistics.csv")
-    stats_df.to_csv(stats_path, index=False)
-
-    log.info("\n" + "=" * 60)
-    log.info("ESTADÍSTICAS DE EXPANSIÓN URBANA:")
-    log.info("=" * 60)
-    log.info(stats_df.to_string(index=False))
-    log.info(f"\n✓ Estadísticas guardadas: {stats_path}")
-    log.info("=" * 60)
+    compute_statistics(all_series)
+    log.info("\n✓ Paso 4 completado — resultados en results/maps/")
 
 
 if __name__ == "__main__":

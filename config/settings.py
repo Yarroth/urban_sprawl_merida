@@ -1,147 +1,147 @@
 """
-config/settings.py
-Parámetros globales del proyecto de predicción de expansión urbana - Mérida, Yucatán.
-Ajusta estos valores según tus necesidades y datos disponibles.
+config/settings.py  —  v2.0
+Parámetros globales del proyecto. Versión 2.0 incorpora:
+  - LightGBM en lugar de Random Forest
+  - Variables kársticas específicas de Mérida (LST, cenotes, acuífero)
+  - CA de reglas aprendidas (segundo LightGBM sobre vecindad)
+  - Optimización multiobjetivo con Optuna
 """
 
-# ─────────────────────────────────────────────
-# ÁREA DE ESTUDIO
-# ─────────────────────────────────────────────
+# ── ÁREA DE ESTUDIO ──────────────────────────────────────────
 STUDY_AREA = {
     "name": "Mérida, Yucatán, México",
-    "bbox": {
-        # Bounding box que cubre la ZMM (Zona Metropolitana de Mérida)
-        # Formato: [min_lon, min_lat, max_lon, max_lat]
-        "min_lon": -90.05,
-        "min_lat":  20.75,
-        "max_lon": -89.45,
-        "max_lat":  21.25,
-    },
-    # Coordenadas del centro histórico (Plaza Grande)
+    "bbox": {"min_lon": -90.05, "min_lat": 20.75, "max_lon": -89.45, "max_lat": 21.25},
     "center": (-89.6237, 20.9674),
-    # CRS de salida (UTM zona 16N — ideal para Yucatán)
     "crs": "EPSG:32616",
 }
 
-# ─────────────────────────────────────────────
-# RESOLUCIÓN Y AÑOS
-# ─────────────────────────────────────────────
-PIXEL_RESOLUTION = 30          # metros por píxel (LANDSAT nativo)
-TRAIN_YEARS      = [2015, 2020, 2024]   # años históricos para entrenamiento
-PREDICT_YEARS    = [2026, 2027, 2028, 2029, 2030]  # años a simular
-BASE_YEAR        = 2024        # año de inicio de la simulación
+PIXEL_RESOLUTION = 30
+TRAIN_YEARS      = [2015, 2020, 2024]
+PREDICT_YEARS    = [2026, 2027, 2028, 2029, 2030]
+BASE_YEAR        = 2024
 
-# ─────────────────────────────────────────────
-# DATOS SATELITALES (Google Earth Engine)
-# ─────────────────────────────────────────────
+# ── DATOS SATELITALES (GEE) ──────────────────────────────────
 GEE_CONFIG = {
-    "collection": "LANDSAT/LC09/C02/T1_L2",   # LANDSAT 9, Collection 2
-    "fallback":   "LANDSAT/LC08/C02/T1_L2",   # LANDSAT 8 como respaldo
-    "cloud_cover_max": 15,     # % máximo de nubosidad permitida
-    "months_dry_season": [1, 2, 3, 4, 11, 12],  # meses de temporada seca en Yucatán
-    # Bandas necesarias (escala de reflectancia superficial)
-    "bands": ["SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7"],
-    "scale_factor": 0.0000275,
-    "offset": -0.2,
+    "collection":        "LANDSAT/LC09/C02/T1_L2",
+    "fallback":          "LANDSAT/LC08/C02/T1_L2",
+    "cloud_cover_max":   15,
+    "months_dry_season": [1, 2, 3, 4, 11, 12],
+    "bands":             ["SR_B2","SR_B3","SR_B4","SR_B5","SR_B6","SR_B7","ST_B10"],
+    "scale_factor":      0.0000275,
+    "offset":            -0.2,
+    "lst_scale":         0.00341802,   # banda térmica ST_B10 → Kelvin
+    "lst_offset":        149.0,
 }
 
-# ─────────────────────────────────────────────
-# CLASIFICACIÓN LULC
-# ─────────────────────────────────────────────
+# ── CLASIFICACIÓN LULC ───────────────────────────────────────
 LULC_CONFIG = {
-    # Umbrales de índices espectrales para clasificación supervisada
-    "ndvi_urban_max":  0.20,   # NDVI < 0.20 → probable urbano
-    "ndbi_urban_min":  0.05,   # NDBI > 0.05 → probable urbano
-    # Clases de salida
-    "classes": {0: "no_urbano", 1: "urbano"},
-    # Tamaño mínimo de parche para eliminar ruido (en píxeles)
-    "min_patch_size": 9,
+    "ndvi_urban_max":  0.20,
+    "ndbi_urban_min":  0.05,
+    "classes":         {0: "no_urbano", 1: "urbano"},
+    "min_patch_size":  9,
 }
 
-# ─────────────────────────────────────────────
-# VARIABLES ESPACIALES (FEATURES)
-# ─────────────────────────────────────────────
-FEATURES_CONFIG = {
-    # Distancias (en metros)
-    "max_dist_road":        5000,  # distancia máxima a carretera
-    "max_dist_urban_edge":  8000,  # distancia máxima al borde urbano
-    "max_dist_center":     30000,  # distancia máxima al centro histórico
-    # Ventanas de vecindad para regla CA (en píxeles)
-    "neighbor_windows": [3, 5, 9],  # 3x3, 5x5, 9x9
-    # Historial temporal de NDVI (años de promedio)
-    "ndvi_history_years": 3,
+# ── VARIABLES KÁRSTICAS (contribución original) ──────────────
+KARST_CONFIG = {
+    # Temperatura superficial (LST) — isla de calor urbana
+    "lst_weight":         0.35,
+    "lst_threshold_hot":  35.0,       # °C — umbral de isla de calor
+
+    # Cenotes — fuente del SEDUMA Yucatán
+    "cenote_weight":      0.40,
+    "cenote_exclusion_m": 200,        # radio de exclusión en metros
+    "cenote_buffer_m":    500,        # radio de influencia kárstica
+
+    # Vulnerabilidad acuífero kárstico
+    "aquifer_weight":     0.25,
+    # Índice de vulnerabilidad: 0=baja, 1=alta (basado en espesor del suelo)
+    "aquifer_high_threshold": 0.6,
 }
 
-# ─────────────────────────────────────────────
-# MODELO RANDOM FOREST
-# ─────────────────────────────────────────────
-RF_CONFIG = {
-    "n_estimators":     300,
-    "max_depth":         20,
-    "min_samples_leaf":   5,
-    "class_weight":  "balanced",  # compensa desbalance urbano/no-urbano
-    "n_jobs":            -1,       # usa todos los cores
-    "random_state":      42,
-    # Tamaño del set de validación
-    "test_size":          0.25,
-    # Número máximo de muestras de entrenamiento (por memoria)
+# ── FEATURES DEL MODELO ──────────────────────────────────────
+# Versión 2.0: 10 features (7 base + 3 kársticas)
+FEATURE_NAMES = [
+    "dist_urban_edge",   # f0
+    "dist_center",       # f1
+    "dist_road",         # f2
+    "ndvi_mean",         # f3
+    "neighbor_3x3",      # f4
+    "neighbor_5x5",      # f5
+    "neighbor_9x9",      # f6
+    "lst_mean",          # f7 ★ nuevo
+    "dist_cenote",       # f8 ★ nuevo
+    "karst_vuln",        # f9 ★ nuevo
+]
+
+# ── LIGHTGBM (reemplaza Random Forest) ───────────────────────
+LGBM_CONFIG = {
+    "n_estimators":    500,
+    "learning_rate":   0.05,
+    "num_leaves":      63,
+    "max_depth":       -1,
+    "min_child_samples": 20,
+    "subsample":       0.8,
+    "colsample_bytree":0.8,
+    "n_jobs":          -1,
+    "random_state":    42,
+    "test_size":       0.25,
     "max_train_samples": 500_000,
+    # Optuna — optimización de hiperparámetros
+    "optuna_trials":   30,
+    "optuna_timeout":  300,           # segundos
 }
 
-# ─────────────────────────────────────────────
-# AUTÓMATA CELULAR
-# ─────────────────────────────────────────────
+# ── AUTÓMATA CELULAR — REGLAS APRENDIDAS ★ ───────────────────
 CA_CONFIG = {
-    # Pesos de la función de probabilidad total:
-    # P_total = alpha*P_RF + beta*P_neighbors + gamma*P_stochastic
-    "alpha": 0.60,   # peso del modelo RF
-    "beta":  0.30,   # peso de la regla de vecindad
-    "gamma": 0.10,   # componente estocástica
+    # Pesos de la función de probabilidad total
+    "alpha":  0.55,   # P_LightGBM
+    "beta":   0.25,   # P_vecindad aprendida
+    "gamma":  0.15,   # P_kárstico
+    "delta":  0.05,   # estocástico
 
-    # Umbral de probabilidad para convertir una celda a urbana
-    "conversion_threshold": 0.50,
+    "annual_growth_rate":   0.035,
+    "neighborhood_radius":  5,
 
-    # Tasa de crecimiento anual estimada (% del área urbana actual)
-    # Basada en datos históricos ZMM: ~3.5% anual
-    "annual_growth_rate": 0.035,
+    # CA de reglas aprendidas: features del estado de vecindad
+    "ca_rule_features": [
+        "nbr_density_3x3", "nbr_density_5x5", "nbr_density_9x9",
+        "p_lgbm", "dist_edge", "lst_local", "karst_local"
+    ],
 
-    # Radio de vecindad para regla CA (en píxeles)
-    "neighborhood_radius": 5,
-
-    # Restricciones de conversión (1 = no puede urbanizarse)
-    "exclude_classes": ["agua", "cenote", "reserva_natural"],
+    # Escenarios predefinidos
+    "scenarios": {
+        "no_plan":    {"alpha":0.60,"beta":0.30,"gamma":0.00,"delta":0.10,"exclusions":[]},
+        "plan_trad":  {"alpha":0.55,"beta":0.30,"gamma":0.05,"delta":0.10,"exclusions":["cenotes","reservas"]},
+        "ia_optimo":  {"alpha":0.55,"beta":0.25,"gamma":0.15,"delta":0.05,"exclusions":["cenotes","reservas","lst_hotspots","karst_alta"]},
+    },
 }
 
-# ─────────────────────────────────────────────
-# RUTAS DE DATOS Y SALIDAS
-# ─────────────────────────────────────────────
+# ── RUTAS ────────────────────────────────────────────────────
 import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 PATHS = {
-    "raw":            os.path.join(BASE_DIR, "data", "raw"),
-    "processed":      os.path.join(BASE_DIR, "data", "processed"),
-    "output":         os.path.join(BASE_DIR, "data", "output"),
-    "models":         os.path.join(BASE_DIR, "models"),
-    "results_maps":   os.path.join(BASE_DIR, "results", "maps"),
-    "results_reports":os.path.join(BASE_DIR, "results", "reports"),
-    # Archivos específicos
-    "lulc_base":      os.path.join(BASE_DIR, "data", "processed", "lulc_{year}.tif"),
-    "features":       os.path.join(BASE_DIR, "data", "processed", "features_{year}.tif"),
-    "rf_model":       os.path.join(BASE_DIR, "models", "rf_model.pkl"),
-    "prediction":     os.path.join(BASE_DIR, "results", "maps", "prediction_{year}.tif"),
-    "urban_extent":   os.path.join(BASE_DIR, "results", "maps", "urban_extent_{year}.shp"),
-    "municipalities": os.path.join(BASE_DIR, "data", "raw", "merida_municipio.shp"),
-    "roads":          os.path.join(BASE_DIR, "data", "raw", "red_vial_zmm.shp"),
+    "raw":             os.path.join(BASE_DIR, "data", "raw"),
+    "processed":       os.path.join(BASE_DIR, "data", "processed"),
+    "output":          os.path.join(BASE_DIR, "data", "output"),
+    "models":          os.path.join(BASE_DIR, "models"),
+    "results_maps":    os.path.join(BASE_DIR, "results", "maps"),
+    "results_reports": os.path.join(BASE_DIR, "results", "reports"),
+    "lulc_base":       os.path.join(BASE_DIR, "data", "processed", "lulc_{year}.tif"),
+    "features":        os.path.join(BASE_DIR, "data", "processed", "features_{year}.tif"),
+    "lgbm_model":      os.path.join(BASE_DIR, "models", "lgbm_model.pkl"),
+    "ca_model":        os.path.join(BASE_DIR, "models", "ca_rules_model.pkl"),
+    "prediction":      os.path.join(BASE_DIR, "results", "maps", "prediction_{year}_{scenario}.tif"),
+    "urban_extent":    os.path.join(BASE_DIR, "results", "maps", "urban_extent_{year}_{scenario}.shp"),
+    "municipalities":  os.path.join(BASE_DIR, "data", "raw", "merida_municipio.shp"),
+    "roads":           os.path.join(BASE_DIR, "data", "raw", "red_vial_zmm.shp"),
+    "cenotes":         os.path.join(BASE_DIR, "data", "raw", "cenotes_seduma.shp"),
+    "lst":             os.path.join(BASE_DIR, "data", "processed", "lst_{year}.tif"),
+    "karst_vuln":      os.path.join(BASE_DIR, "data", "raw", "vulnerabilidad_karstica.tif"),
 }
 
-# ─────────────────────────────────────────────
-# VISUALIZACIÓN
-# ─────────────────────────────────────────────
 VIZ_CONFIG = {
     "dpi": 200,
-    "figsize": (14, 10),
+    "figsize": (18, 8),
     "colormap_probability": "YlOrRd",
-    "colormap_lulc": {0: "#4CAF50", 1: "#E53935"},  # verde/rojo
-    "output_format": "png",
+    "scenario_colors": {"no_plan":"#E53935","plan_trad":"#43A047","ia_optimo":"#7C4DFF"},
 }
