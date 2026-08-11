@@ -261,6 +261,13 @@ SAFETY_CONFIG = {
         {"fecha": "2026-07-08", "sector": "WSW", "fuente": "Diario de Yucatán", "nota": "grave atropellado en el Periférico Poniente"},
         {"fecha": "2026-04-11", "sector": "E",   "fuente": "Novedades Yucatán", "nota": "incidente fatal en el periférico oriente"},
         {"fecha": "2026-02-05", "sector": "E",   "fuente": "Sol Yucatán", "nota": "peatón muere en el Periférico Oriente"},
+        # ── Históricos 2024–2025 (fuera del año de calibración) ──
+        {"fecha": "2024-04-18", "sector": "SE",  "fuente": "Diario de Yucatán vía Yucatán al Mano",
+         "nota": "peatón cruza en el puente vehicular de Kanasín; provoca volcadura (racha mar-abr 2024)"},
+        {"fecha": "2024-12-01", "sector": "SE",  "fuente": "Yucatán.com.mx",
+         "nota": "peatón atropellada a la altura de calle 42, Reparto Granjas de Kanasín"},
+        {"fecha": "2025-07-01", "sector": "SE",  "fuente": "Reporteros Hoy",
+         "nota": "km 13 del anillo, peatón fallece (fecha aprox.; km 13 ≈ SE entre Sur y Oriente)"},
         {"fecha": "2026-07-18", "sector": "E",   "fuente": "Reporteros Hoy", "nota": "accidente en intersección, entrada Col. Cactus"},
         {"fecha": "2026-04-15", "sector": "E",   "fuente": "Instagram/prensa", "nota": "fallece atropellado en el oriente"},
     ],

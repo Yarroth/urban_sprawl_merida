@@ -211,13 +211,16 @@ acumuladas vs 109 observadas (22 ya evitadas por medidas actuales); de haber
 estado vigente Visión Cero todo el periodo habría evitado **~65 vidas**
 (`results/safety/evolucion_temporal.csv` y `evolucion_temporal.png`).
 
-**Validación de pesos contra atropellamientos reales** (prensa 2026, corpus de
-15 incidentes localizados por tramo en `SAFETY_CONFIG`): el ranking de S
-(líder en atlas y en prensa) coincide, pero la correlación general es débil
-(Spearman peso del atlas vs prensa = 0.29; riesgo del modelo = 0.15, n=12, sin
-significancia). La prensa sobrerrepresenta **Norte y Oriente** y subrepresenta
-el **suroeste** — un censo oficial por tramo (SSP/IMEPLAN) cerraría la brecha
-(`results/safety/validacion_pesos.csv` y sección en `seguridad_peatonal.md`).
+**Validación de pesos contra atropellamientos reales** (prensa 2024–2026,
+corpus de 18 incidentes localizados por tramo en `SAFETY_CONFIG`): S es líder
+en atlas y en prensa, pero la correlación general es débil (Spearman peso del
+atlas vs prensa = 0.19; riesgo del modelo = 0.06, n=12, sin significancia) y
+baja al incluir el cúmulo histórico de **Kanasín/SE** (3 eventos 2024–2025):
+los incidentes siguen los *puntos de deseo de cruce* (auditor vial R. Flores
+Ayora, Diario de Yucatán 04/2024), no solo el volumen. La prensa
+sobrerrepresenta Norte, Oriente y SE — un censo oficial por tramo
+(SSP/IMEPLAN) cerraría la brecha (`results/safety/validacion_pesos.csv` y
+sección en `seguridad_peatonal.md`).
 
 ---
 

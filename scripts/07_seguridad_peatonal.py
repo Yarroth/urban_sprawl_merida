@@ -152,34 +152,44 @@ def temporal_analysis(segs):
 
 
 def radial_diagram(segs):
-    """Rosa de riesgo con doble anillo: exterior = muertes/año por sector
-    (2025, color YlOrRd) e interior = aforo vehicular (miles veh/día, azul),
-    para comparar riesgo y volumen lado a lado."""
+    """Rosa de riesgo con tres anillos: exterior = muertes/año por sector
+    (YlOrRd), medio punteado = atropellamientos de prensa 2026 (púrpura) e
+    interior = aforo vehicular (miles veh/día, azul). Atlas vs realidad de un
+    vistazo."""
     names = [s["name"] for s in segs]
     deaths = np.array([s["base_deaths"] for s in segs])
     aadts = np.array([s["aadt"] for s in segs])
+    press = np.array([sum(1 for inc in SC.get("incidentes_prensa", [])
+                         if inc["sector"] == s["name"]) for s in segs])
     n = len(segs)
     theta = np.deg2rad(np.arange(n) * 360.0 / n + 360.0 / n / 2)
     width = np.deg2rad(360.0 / n) * 0.9
-    d_max, a_max = deaths.max(), aadts.max()
+    d_max, a_max, p_max = deaths.max(), aadts.max(), max(press.max(), 1)
 
-    fig = plt.figure(figsize=(8.2, 8.2), dpi=VIZ_CONFIG["dpi"])
+    fig = plt.figure(figsize=(8.4, 8.4), dpi=VIZ_CONFIG["dpi"])
     ax = fig.add_subplot(111, projection="polar")
 
-    # Anillo interior: aforo vehicular (azul, escala propia 0–0.40 de radio)
-    ax.bar(theta, 0.40 * aadts / a_max, width=width, bottom=0.0,
+    # Anillo interior: aforo vehicular (azul, escala 0–0.35)
+    ax.bar(theta, 0.35 * aadts / a_max, width=width, bottom=0.0,
            color="#29B6F6", edgecolor="white", linewidth=0.6, alpha=0.85)
-    # Anillo exterior: muertes/año (riesgo, escala propia 0.52–1.00 de radio)
+    # Anillo medio punteado: atropellamientos de prensa 2026 (púrpura, 0.42–0.49)
+    ax.bar(theta, 0.07 * press / p_max, width=width, bottom=0.42,
+           color="#7C4DFF", hatch="..", edgecolor="white", linewidth=0.4,
+           alpha=0.85)
+    # Anillo exterior: muertes/año (riesgo, YlOrRd, 0.56–1.00)
     norm = plt.Normalize(deaths.min(), deaths.max())
     cmap = plt.get_cmap("YlOrRd")
-    ax.bar(theta, 0.48 * deaths / d_max, width=width, bottom=0.52,
+    ax.bar(theta, 0.44 * deaths / d_max, width=width, bottom=0.56,
            color=cmap(norm(deaths)), edgecolor="white", linewidth=0.6, alpha=0.95)
 
-    for t, nm, d, a in zip(theta, names, deaths, aadts):
-        ax.text(t, 1.06, nm, ha="center", va="center", fontsize=9, fontweight="bold")
-        ax.text(t, 0.52 + 0.48 * d / d_max + 0.025, f"{d:.1f}", ha="center",
+    for t, nm, d, a, p in zip(theta, names, deaths, aadts, press):
+        ax.text(t, 1.05, nm, ha="center", va="center", fontsize=9, fontweight="bold")
+        ax.text(t, 0.56 + 0.44 * d / d_max + 0.02, f"{d:.1f}", ha="center",
                 va="bottom", fontsize=8, color="#7A0000", fontweight="bold")
-        ax.text(t, 0.40 * a / a_max + 0.015, f"{a/1000:.0f}k", ha="center",
+        if p > 0:
+            ax.text(t, 0.42 + 0.07 * p / p_max + 0.012, str(int(p)), ha="center",
+                    va="bottom", fontsize=7, color="#4A148C", fontweight="bold")
+        ax.text(t, 0.35 * a / a_max + 0.012, f"{a/1000:.0f}k", ha="center",
                 va="bottom", fontsize=7, color="#01579B", fontweight="bold")
 
     ax.set_theta_zero_location("N")
@@ -191,13 +201,19 @@ def radial_diagram(segs):
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     cbar = plt.colorbar(sm, ax=ax, pad=0.10, shrink=0.75)
     cbar.set_label("Muertes/año por sector (2025)")
-    ax.text(np.deg2rad(90), 0.20, "anillo interior = aforo vehicular (miles veh/día)",
-            ha="center", fontsize=8, color="#01579B")
-    ax.set_title("Riesgo peatonal por sector — Anillo Periférico de Mérida", pad=30, fontsize=13)
+    from matplotlib.patches import Patch
+    ax.legend(handles=[
+        Patch(color="#29B6F6", label="Aforo (miles veh/día)"),
+        Patch(facecolor="#7C4DFF", hatch="..", label="Atropellamientos prensa 2026"),
+        Patch(color="#E53935", label="Muertes/año (riesgo)"),
+    ], loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=3, fontsize=8,
+        frameon=False)
+    ax.set_title("Riesgo peatonal por sector — Anillo Periférico de Mérida", pad=42, fontsize=13)
     fig.tight_layout()
     fig.savefig(OUT / "anillo_sectores.png", bbox_inches="tight")
     plt.close(fig)
-    log.info("Radial: %s (más riesgo) → %s (menos riesgo)", names[int(np.argmax(deaths))], names[int(np.argmin(deaths))])
+    log.info("Radial: %s (más riesgo) → %s (menos riesgo); prensa: %d incidentes",
+             names[int(np.argmax(deaths))], names[int(np.argmin(deaths))], int(press.sum()))
 
 
 def validar_pesos(segs):
@@ -393,11 +409,16 @@ def main():
         "geografía de los incidentes.",
         f"- **Spearman riesgo del modelo (muertes base) vs prensa**: {rho_r:.2f} ",
         f"(p={p_r:.3f}).",
-        "- Divergencias visibles: prensa sobrerrepresenta **Norte y Oriente** ",
-        "(volumen alto o cruces conflictivos pese a su infraestructura) y ",
-        "subrepresenta el **suroeste**. Con n=12 los valores no son ",
-        "estadísticamente significativos; un censo oficial de atropellamientos ",
-        "por tramo (SSP/IMEPLAN) cerraría la brecha.",
+        "- Al ampliar el corpus a 2024–2026 (con el cúmulo de **Kanasín/SE**: 3 ",
+        "eventos de 2024–2025 en puentes y cruces del suroriente), la correlación ",
+        "baja (0.29 → 0.19): los incidentes siguen los **puntos de deseo de ",
+        "cruce** (flujo peatonal intenso, puentes elevados a 200–300 m del cruce ",
+        "deseado — auditor vial René Flores Ayora, Diario de Yucatán 04/2024), no ",
+        "solo el volumen vehicular.",
+        "- La prensa sobrerrepresenta Norte, Oriente y SE y subrepresenta el ",
+        "suroeste. Con n=12 los valores no son estadísticamente significativos; ",
+        "un censo oficial por tramo (SSP/IMEPLAN) y una capa de demanda peatonal ",
+        "cerrarían la brecha.",
         "",
         "## Por sector (línea base)",
         "",
