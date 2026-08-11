@@ -33,3 +33,7 @@ seaborn>=0.13.0
 # Utilidades
 requests>=2.31.0
 tqdm>=4.66.0
+
+# PDFs de entrega (pie de página: sección + numeración)
+pypdf>=4.0.0
+reportlab>=4.0.0

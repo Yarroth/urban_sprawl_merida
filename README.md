@@ -20,13 +20,19 @@ con visualización interactiva.
 │   ├── 04_simulate_ca.py    # Simulación CA 3 escenarios → results/maps/*.tif
 │   ├── 05_visualize.py      # Mapas, gráficas por escenario, reporte
 │   ├── 06_calibrar_tasas.py # Calibración empírica de tasas (ZMM 1998–2020)
-│   └── 07_seguridad_peatonal.py  # Incidentes peatonales vs densidad (Periférico)
+│   ├── 07_seguridad_peatonal.py  # Incidentes peatonales vs densidad (Periférico)
+│   └── 08_indicadores_ambientales.py  # LST/NDVI/cenotes/kárstico por escenario (rasters reales)
 ├── frontend/
-│   ├── generar_dashboard.py # Genera el dashboard HTML (mapas + métricas + seguridad)
-│   ├── dashboard_resultados.html  # Dashboard interactivo completo
+│   ├── generar_dashboard.py # Genera el dashboard HTML + PDF imprimible
+│   ├── dashboard_resultados.html  # Dashboard oficial de resultados (entregable)
 │   ├── dashboard_resultados.pdf   # Versión imprimible A4 (entrega final)
 │   ├── generar_reporte_pdf.py     # Convierte los reportes .md → PDF técnico
-│   └── reporte_tecnico.pdf        # Reporte técnico completo (pipeline + tasas + seguridad)
+│   ├── reporte_tecnico.pdf        # Reporte técnico completo (pipeline + tasas + seguridad)
+│   ├── generar_prototipo_pdf.py   # PDF imprimible del prototipo 3D interactivo
+│   ├── prototipo_3d.pdf           # Prototipo 3D en PDF (portada + 4 secciones)
+│   ├── merida_combined_dashboard.html  # Prototipo A: dashboard integrado (9 secciones)
+│   ├── merida_urban_expansion_3d_comparison.html  # Prototipo B: simulador 3D técnico
+│   └── pie_paginas.py             # Pie de página (sección + numeración) para los PDFs
 ├── docs/                    # Entregables: propuestas, estudios, speech, matemáticas
 ├── docs/                    # Entregables: propuestas, estudios, speech, matemáticas
 │   └── archivo/             # Zips históricos (snapshots ya absorbidos por git)
@@ -252,31 +258,56 @@ totales, pero cuesta ~22% más por solo 6.5 pp adicionales.
 
 ---
 
-## Dashboard y entrega final
-
-`frontend/dashboard_resultados.html` consolida todo el análisis (mapas de
+## Dashboard y entrega final`frontend/dashboard_resultados.html` consolida todo el análisis (mapas de
 probabilidad por escenario y año, comparaciones 2024→2030, calidad espacial,
-seguridad peatonal del Periférico). Para la versión imprimible:
+seguridad peatonal del Periférico). Los dos generadores producen el HTML y
+exportan el PDF con Chrome headless en un solo paso:
 
 ```bash
-python frontend/generar_dashboard.py   # regenera el HTML
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --headless=new --disable-gpu --no-pdf-header-footer \
-  --print-to-pdf=frontend/dashboard_resultados.pdf \
-  file://$(pwd)/frontend/dashboard_resultados.html
+python scripts/08_indicadores_ambientales.py  # CSV+PNG de indicadores ambientales
+python frontend/generar_dashboard.py     # HTML + PDF imprimible (14 páginas)
+python frontend/generar_reporte_pdf.py   # PDF del reporte técnico (8 páginas)
+python frontend/generar_prototipo_pdf.py # PDF del prototipo 3D (5 páginas)
 ```
 
-El PDF resultante (A4 apaisado, 13 páginas) incluye portada con resumen
-ejecutivo e **índice de contenidos con paginación** (páginas calculadas por el
-generador), y los estilos de impresión definidos en `@media print`: tema
-claro, una página por sección y los 15 mapas en cuadrículas de 5.
+El paso **08** cruza los extents simulados 2030 con las features reales
+(`features_2024.tif`: LST, NDVI, distancia a cenotes, vulnerabilidad kárstica)
+para medir dónde aterriza la expansión 2024→2030: la **gestión IA** urbaniza
+menos celdas nuevas (1 953 vs 3 047 sin plan), en zonas más frescas (29.5 vs
+31.2 °C), más alejadas de cenotes (3.1 vs 2.9 km) y conserva más suelo no
+urbano (79.8% vs 78.6%). El dashboard incluye esta sección como
+"Indicadores ambientales de la expansión (2030)".
 
-Para el **reporte técnico completo** (pipeline v2.0 + calibración de tasas +
-seguridad peatonal, A4 vertical con tablas e imágenes embebidas):
+El **prototipo 3D** (`frontend/merida_urban_expansion_3d_comparison.html`) es
+un simulador interactivo con vista 3D por escenario, indicadores 2024–2030 y
+planificador IA; su versión imprimible (`prototipo_3d.pdf`, A4 apaisado,
+5 páginas) incluye portada con resumen ejecutivo, la comparativa 3D a 2030,
+los 6 charts de indicadores, los parámetros por defecto del planificador y la
+arquitectura del modelo. El generador fuerza la visibilidad de los paneles y
+espera a Chart.js (CDN) para que los gráficos rendericen antes de exportar.
 
-```bash
-python frontend/generar_reporte_pdf.py   # → frontend/reporte_tecnico.pdf (8 páginas)
-```
+### Prototipos interactivos (2 versiones finales)
+
+| Archivo | Cuál es | Contenido |
+|---------|---------|-----------|
+| `frontend/merida_combined_dashboard.html` | **Prototipo A · Dashboard integrado** | 9 secciones: resumen con hallazgos (196 km² evitados, retorno 4.5:1), vista 3D, 3 escenarios, inversión 1,500 MDP, indicadores, planificador IA, propuestas ciudadanas, marco legal y comparativa final. Versión orientada a presentación de política pública. |
+| `frontend/merida_urban_expansion_3d_comparison.html` | **Prototipo B · Simulador 3D técnico** | 4 secciones: vista 3D comparativa, 6 indicadores 2024–2030 (área, fragmentación, verde, calidad de vida, LST, vulnerabilidad kárstica), planificador IA con parámetros CA y arquitectura del modelo. Es la fuente del PDF `prototipo_3d.pdf`. |
+
+El **dashboard oficial** de resultados (`frontend/dashboard_resultados.html`)
+es el entregable de datos reales del pipeline y es independiente de estos
+prototipos de simulación interactiva. Prototipos descartados en la
+consolidación (eliminados del repo, recuperables del historial git):
+`merida_v3.html` (superado por el simulador 3D), `merida_urban_sprawl_frontend_v3.html`
+(subconjunto sin sección de modelo) y `merida_urban_expansion_3d_comparison_v2.html`
+(variante de 2 escenarios sin planificador IA).
+
+Ambos PDFs llevan **pie de página con nombre de sección y numeración**
+(`Página N de M`), superpuesto por `frontend/pie_paginas.py` (pypdf + reportlab,
+ya que Chrome headless no soporta `counter(page)`); el mapeo página→sección
+se obtiene buscando los títulos en el texto del PDF, así que se mantiene
+correcto aunque cambie la paginación. El dashboard (A4 apaisado) incluye
+portada con resumen ejecutivo e **índice de contenidos paginado**, tema claro
+y los 15 mapas en cuadrículas de 5.
 
 ---
 

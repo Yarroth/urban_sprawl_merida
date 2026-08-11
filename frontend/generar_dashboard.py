@@ -7,6 +7,7 @@ Requisitos: numpy, pandas (y los PNG generados por scripts/05_visualize.py).
 """
 import base64
 import datetime
+import subprocess
 from pathlib import Path
 import pandas as pd
 
@@ -146,6 +147,33 @@ def main():
             f"<tbody>{''.join(st_rows)}</tbody></table>"
         )
 
+    # Indicadores ambientales de la expansión (script 08, desde rasters reales)
+    ambient = ""
+    if (REP / "indicadores_ambientales.csv").exists():
+        adv = pd.read_csv(REP / "indicadores_ambientales.csv")
+        ad_rows = []
+        for _, r in adv.iterrows():
+            sc = r["escenario"]
+            ad_rows.append(
+                f'<tr><td><span class="dot" style="background:{SC_COLOR.get(sc, "#888")}"></span>{SC_LABEL.get(sc, sc)}</td>'
+                f'<td>{int(r["celdas_nuevas"])}</td>'
+                f'<td>{r["lst_nuevas"]:.2f} °C</td>'
+                f'<td>{r["dist_cenote_m"]:.0f} m</td>'
+                f'<td>{r["karst_nuevas"]:.3f}</td>'
+                f'<td>{r["verde_2030_pct"]:.1f}%</td></tr>'
+            )
+        ambient = (
+            '<div class="temporal"><h2 id="sec-ambiental">Indicadores ambientales de la expansión (2030)</h2>'
+            '<div class="sub">Celdas <b>nuevas</b> 2024→2030 cruzadas con features reales '
+            '(LST, distancia a cenotes, vulnerabilidad kárstica) y cobertura no urbana total. '
+            'La gestión IA urbaniza menos celdas, en zonas más frescas y alejadas de cenotes.</div>'
+            '<table><thead><tr><th>Escenario</th><th>Celdas nuevas</th><th>LST media (°C)</th>'
+            '<th>Dist. a cenotes (m)</th><th>Vuln. kárstica</th><th>Suelo no urbano 2030</th></tr></thead>'
+            f'<tbody>{"".join(ad_rows)}</tbody></table>'
+            f'<img src="{b64(REP / "indicadores_ambientales.png")}" alt="Indicadores ambientales por escenario">'
+            '</div>'
+        )
+
     tabs, grids = [], []
     for s in scenarios:
         grp = stats[stats["scenario"] == s].set_index("year")
@@ -216,16 +244,33 @@ def main():
         )
     # Índice de contenidos con paginación (layout print: una sección por página)
     safety_present = (SAFE / "resumen_escenarios.csv").exists()
-    # Bloques que ocupan una página en el PDF (ver @media print). Los grids de
-    # plan_trad/ia_optimo añaden 2 páginas entre "Mapas" y "Comparación".
-    page_blocks = ["cover", "sec-areas", "sec-espacial", "sec-mapas",
-                   "grid-plan_trad", "grid-ia_optimo", "sec-comp"]
+    # Marcadores (texto de la sección → nombre del pie) para mapear páginas
+    markers = [
+        ("Área urbana proyectada", "Área urbana proyectada (km²)"),
+        ("Calidad espacial de la expansión", "Calidad espacial de la expansión"),
+        ("Indicadores ambientales de la expansión", "Indicadores ambientales"),
+        ("Mapas de probabilidad por escenario", "Mapas de probabilidad por escenario"),
+        ("Comparación 2024 → 2030 por escenario", "Comparación 2024 → 2030"),
+    ]
+    if safety_present:
+        markers += [
+            ("Seguridad peatonal — Periférico", "Seguridad peatonal — Periférico"),
+            ("Riesgo por sector del anillo", "Riesgo por sector del anillo"),
+            ("Visión Cero: uniforme vs priorizada", "Visión Cero priorizada"),
+            ("Evolución temporal 2020–2025", "Evolución temporal 2020–2025"),
+        ]
+    # Bloques que ocupan una página en el PDF (ver @media print): el h2 de
+    # mapas va en su propia página y cada grid de escenario en la suya.
+    page_blocks = ["cover", "sec-areas", "sec-espacial", "sec-ambiental",
+                   "sec-mapas", "grid-no_plan", "grid-plan_trad", "grid-ia_optimo",
+                   "sec-comp"]
     if safety_present:
         page_blocks += ["sec-safety", "sec-radial", "sec-vz", "sec-temporal"]
     toc_pages = {name: idx + 1 for idx, name in enumerate(page_blocks)}
     toc_items = [
         ("Área urbana proyectada (km²)", "sec-areas"),
         ("Calidad espacial de la expansión", "sec-espacial"),
+        ("Indicadores ambientales de la expansión", "sec-ambiental"),
         ("Mapas de probabilidad por escenario y año", "sec-mapas"),
         ("Comparación 2024 → 2030 por escenario", "sec-comp"),
     ]
@@ -236,6 +281,8 @@ def main():
             ("Visión Cero: uniforme vs priorizada", "sec-vz"),
             ("Evolución temporal 2020–2025", "sec-temporal"),
         ]
+    toc_items_by_id = {sid: (label, sec) for (label, sid), sec in
+                       zip(toc_items, [m[1] for m in markers])}
     toc_html = '<div class="cover-toc">' + "".join(
         f'<a href="#{sid}"><span>{label}</span><span class="pg">{toc_pages[sid]}</span></a>'
         for label, sid in toc_items
@@ -355,6 +402,8 @@ def main():
   <div class="sub">Mayor área media por parche y menor borde por km² = expansión más compacta.
   El borde por km² tiende a ser mayor en áreas urbanas más pequeñas (efecto de escala).</div>
 
+  %%AMBIENT%%
+
   <h2 id="sec-mapas">Mapas de probabilidad por escenario y año</h2>
   <div class="legend"><span>Probabilidad:</span><span class="bar"></span><span>0.2 → 1.0</span></div>
   <div class="tabs">%%TABS%%</div>
@@ -391,6 +440,7 @@ def main():
                 .replace("%%FEAT%%", str(metrics.get("n_features", "?")))
                 .replace("%%TABLE%%", table)
                 .replace("%%SPATIAL%%", spatial_table)
+                .replace("%%AMBIENT%%", ambient)
                 .replace("%%TABS%%", "".join(tabs))
                 .replace("%%GRIDS%%", "".join(grids))
                 .replace("%%COMPS%%", comps)
@@ -399,6 +449,31 @@ def main():
 
     OUT.write_text(html, encoding="utf-8")
     print(f"Dashboard generado: {OUT} ({OUT.stat().st_size / 1024:.0f} KB)")
+
+    # ── Exportación PDF (Chrome headless) + pie de página ──
+    chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    if not Path(chrome).exists():
+        print("Chrome no encontrado; se omitió el PDF (solo HTML).")
+        return
+    pdf = ROOT / "frontend" / "dashboard_resultados.pdf"
+    subprocess.run([chrome, "--headless=new", "--disable-gpu",
+                    "--no-pdf-header-footer", f"--print-to-pdf={pdf}",
+                    OUT.as_uri()], check=True)
+    from pie_paginas import pie_de_pagina
+    secciones = pie_de_pagina(pdf, titulo="Predicción de la Expansión Urbana de Mérida",
+                              markers=markers, altura_mm=7)
+    # Verificación: la página del índice debe tener la sección esperada
+    ok = True
+    for sid in toc_pages:
+        if sid not in toc_items_by_id:
+            continue
+        sec_esperada = toc_items_by_id[sid][1]
+        if secciones.get(toc_pages[sid]) != sec_esperada:
+            ok = False
+            print(f"  AVISO: {sid} esperado en p{toc_pages[sid]} como '{sec_esperada}', "
+                  f"real: p{toc_pages[sid]}='{secciones.get(toc_pages[sid])}'")
+    estado = "índice verificado" if ok else "índice DESCUADRADO"
+    print(f"PDF generado: {pdf} ({pdf.stat().st_size / 1024:.0f} KB) — {estado}")
 
 
 if __name__ == "__main__":

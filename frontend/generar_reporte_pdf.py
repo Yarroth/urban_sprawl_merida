@@ -221,6 +221,14 @@ def main():
         f"--print-to-pdf={OUT}", tmp_html.as_uri(),
     ], check=True)
     tmp_html.unlink(missing_ok=True)
+    from pie_paginas import pie_de_pagina
+    markers = [
+        ("Reporte de Predicción de Expansión Urbana", "Reporte del pipeline (v2.0)"),
+        ("Calibración empírica de tasas de crecimiento", "Calibración de tasas"),
+        ("Seguridad peatonal — Anillo Periférico de Mérida", "Seguridad peatonal — Periférico"),
+    ]
+    pie_de_pagina(OUT, titulo="Predicción de la Expansión Urbana de Mérida",
+                  markers=markers, altura_mm=11)
     print(f"PDF generado: {OUT} ({OUT.stat().st_size / 1024:.0f} KB)")
 
 
