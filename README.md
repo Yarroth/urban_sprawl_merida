@@ -24,7 +24,9 @@ con visualización interactiva.
 ├── frontend/
 │   ├── generar_dashboard.py # Genera el dashboard HTML (mapas + métricas + seguridad)
 │   ├── dashboard_resultados.html  # Dashboard interactivo completo
-│   └── dashboard_resultados.pdf   # Versión imprimible A4 (entrega final)
+│   ├── dashboard_resultados.pdf   # Versión imprimible A4 (entrega final)
+│   ├── generar_reporte_pdf.py     # Convierte los reportes .md → PDF técnico
+│   └── reporte_tecnico.pdf        # Reporte técnico completo (pipeline + tasas + seguridad)
 ├── docs/                    # Entregables: propuestas, estudios, speech, matemáticas
 ├── docs/                    # Entregables: propuestas, estudios, speech, matemáticas
 │   └── archivo/             # Zips históricos (snapshots ya absorbidos por git)
@@ -265,8 +267,16 @@ python frontend/generar_dashboard.py   # regenera el HTML
 ```
 
 El PDF resultante (A4 apaisado, 13 páginas) incluye portada con resumen
-ejecutivo y los estilos de impresión definidos en `@media print` del generador:
-tema claro, una página por sección y los 15 mapas en cuadrículas de 5.
+ejecutivo e **índice de contenidos con paginación** (páginas calculadas por el
+generador), y los estilos de impresión definidos en `@media print`: tema
+claro, una página por sección y los 15 mapas en cuadrículas de 5.
+
+Para el **reporte técnico completo** (pipeline v2.0 + calibración de tasas +
+seguridad peatonal, A4 vertical con tablas e imágenes embebidas):
+
+```bash
+python frontend/generar_reporte_pdf.py   # → frontend/reporte_tecnico.pdf (8 páginas)
+```
 
 ---
 

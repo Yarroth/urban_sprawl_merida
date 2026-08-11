@@ -54,7 +54,7 @@ def main():
         base_row = sres[sres["escenario"] == "base"].iloc[0]
         safety = (
             '<div class="safety-grid">'
-            '<div><h2>Seguridad peatonal — Periférico</h2>'
+            '<div><h2 id="sec-safety">Seguridad peatonal — Periférico</h2>'
             '<div class="sub">Valida incidentes peatonales vs densidad vehicular (~150k veh/día) '
             f'y escenarios de política. Línea base: {base_row["muertes_año"]:.0f} muertes/año '
             f'({base_row["peatones_año"]:.0f} peatonales) en 2025.</div>'
@@ -79,7 +79,7 @@ def main():
             )
         if (SAFE / "anillo_sectores.png").exists():
             safety += (
-                '<div class="temporal" style="text-align:center"><h2>Riesgo por sector del anillo</h2>'
+                '<div class="temporal" style="text-align:center"><h2 id="sec-radial">Riesgo por sector del anillo</h2>'
                 '<div class="sub">12 sectores (N→WSW) según el atlas del Periférico; '
                 'altura y color = muertes/año por sector (2025).</div>'
                 f'<img src="{b64(SAFE / "anillo_sectores.png")}" alt="Riesgo por sector" '
@@ -93,7 +93,7 @@ def main():
                 for _, r in vzdf.sort_values("Reducción priorizada %", ascending=False).head(6).iterrows()
             )
             safety += (
-                '<div class="temporal" style="text-align:center"><h2>Visión Cero: uniforme vs priorizada por demanda</h2>'
+                '<div class="temporal" style="text-align:center"><h2 id="sec-vz">Visión Cero: uniforme vs priorizada por demanda</h2>'
                 '<div class="sub">Al escalar los levers con la demanda peatonal (puntos de deseo de cruce), '
                 'la priorizada logra <b>−54%</b> con <b>−22% de presupuesto</b> vs la uniforme (−61%) — '
                 '<b>+14% de eficiencia</b> por unidad invertida. Hotspots: '
@@ -104,7 +104,7 @@ def main():
             )
         if (SAFE / "evolucion_temporal.csv").exists():
             safety += (
-                '<div class="temporal"><h2>Evolución temporal 2020–2025</h2>'
+                '<div class="temporal"><h2 id="sec-temporal">Evolución temporal 2020–2025</h2>'
                 '<div class="sub">Muertes vs parque vehicular (+77% en una década, INEGI). '
                 f'<b>{tot} muertes observadas</b> vs <b>{cf} contrafactuales</b> (solo parque: '
                 f'{cf - tot} ya evitadas) · <b>Visión Cero habría evitado {vc}</b> en el periodo.</div>'
@@ -214,7 +214,34 @@ def main():
             f'−{cov_vc:.0f}% (Visión Cero). Priorizar las intervenciones por los puntos de deseo de cruce '
             'alcanza −54% con −22% del presupuesto (+14% de eficiencia por unidad invertida).</p>'
         )
+    # Índice de contenidos con paginación (layout print: una sección por página)
+    safety_present = (SAFE / "resumen_escenarios.csv").exists()
+    # Bloques que ocupan una página en el PDF (ver @media print). Los grids de
+    # plan_trad/ia_optimo añaden 2 páginas entre "Mapas" y "Comparación".
+    page_blocks = ["cover", "sec-areas", "sec-espacial", "sec-mapas",
+                   "grid-plan_trad", "grid-ia_optimo", "sec-comp"]
+    if safety_present:
+        page_blocks += ["sec-safety", "sec-radial", "sec-vz", "sec-temporal"]
+    toc_pages = {name: idx + 1 for idx, name in enumerate(page_blocks)}
+    toc_items = [
+        ("Área urbana proyectada (km²)", "sec-areas"),
+        ("Calidad espacial de la expansión", "sec-espacial"),
+        ("Mapas de probabilidad por escenario y año", "sec-mapas"),
+        ("Comparación 2024 → 2030 por escenario", "sec-comp"),
+    ]
+    if safety_present:
+        toc_items += [
+            ("Seguridad peatonal — Periférico", "sec-safety"),
+            ("Riesgo por sector del anillo", "sec-radial"),
+            ("Visión Cero: uniforme vs priorizada", "sec-vz"),
+            ("Evolución temporal 2020–2025", "sec-temporal"),
+        ]
+    toc_html = '<div class="cover-toc">' + "".join(
+        f'<a href="#{sid}"><span>{label}</span><span class="pg">{toc_pages[sid]}</span></a>'
+        for label, sid in toc_items
+    ) + '</div>'
     cover += (
+        f'{toc_html}'
         f'<div class="cover-stats">{cover_cards_html}</div></div>'
         f'<div class="cover-author"><b>Héctor Javier Raya Romo</b> · Mérida, Yucatán · {fecha_es}</div>'
         '</div>'
@@ -288,6 +315,9 @@ def main():
     .cover-hr{width:60mm;border:none;border-top:3px solid #7C4DFF;margin:6mm auto}
     .cover-h2{font-size:15px;color:#7C4DFF;text-transform:uppercase;letter-spacing:1px;margin-bottom:3mm}
     .cover-p{font-size:12px;line-height:1.55;color:#24292f;text-align:justify;max-width:230mm}
+    .cover-toc{display:grid;grid-template-columns:1fr 1fr;gap:1mm 12mm;width:100%;max-width:215mm;margin-top:4mm;text-align:left}
+    .cover-toc a{display:flex;justify-content:space-between;align-items:baseline;gap:8mm;text-decoration:none;color:#24292f;font-size:11px;padding:1mm 2mm;border-bottom:1px dotted #c9ccd1}
+    .cover-toc a .pg{color:#7C4DFF;font-weight:700;font-size:11px}
     .cover-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8mm;width:100%;margin-top:5mm}
     .cover-stat{border:1px solid #c9ccd1;border-radius:8px;padding:5mm 3mm}
     .cover-stat .v{font-size:20px;font-weight:700;color:#1b1f24}
@@ -317,20 +347,20 @@ def main():
     <div class="mcard"><div class="v">%%FEAT%%</div><div class="k">features (7 base + 3 kársticas)</div></div>
   </div>
 
-  <h2>Área urbana proyectada (km²)</h2>
+  <h2 id="sec-areas">Área urbana proyectada (km²)</h2>
   %%TABLE%%
 
-  <h2>Calidad espacial de la expansión (2030)</h2>
+  <h2 id="sec-espacial">Calidad espacial de la expansión (2030)</h2>
   %%SPATIAL%%
   <div class="sub">Mayor área media por parche y menor borde por km² = expansión más compacta.
   El borde por km² tiende a ser mayor en áreas urbanas más pequeñas (efecto de escala).</div>
 
-  <h2>Mapas de probabilidad por escenario y año</h2>
+  <h2 id="sec-mapas">Mapas de probabilidad por escenario y año</h2>
   <div class="legend"><span>Probabilidad:</span><span class="bar"></span><span>0.2 → 1.0</span></div>
   <div class="tabs">%%TABS%%</div>
   %%GRIDS%%
 
-  <h2>Comparación 2024 → 2030 por escenario</h2>
+  <h2 id="sec-comp">Comparación 2024 → 2030 por escenario</h2>
   <div class="comp">%%COMPS%%</div>
 
   %%SAFETY%%
