@@ -64,7 +64,7 @@ def plot_probability_map(year: int, scenario: str, base_urban: np.ndarray = None
         ax.imshow(urban_rgba, extent=extent, origin="upper", aspect="equal")
 
     # Probabilidades de expansión
-    cmap = plt.cm.get_cmap("YlOrRd")
+    cmap = matplotlib.colormaps["YlOrRd"]
     prob_masked = np.ma.masked_where(prob < 0.2, prob)  # ocultar prob muy bajas
     im = ax.imshow(prob_masked, extent=extent, origin="upper",
                    cmap=cmap, vmin=0.2, vmax=1.0, alpha=0.85, aspect="equal")

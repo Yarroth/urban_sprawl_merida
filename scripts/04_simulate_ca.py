@@ -185,6 +185,8 @@ def simulate_scenario(lgbm_model, ca_model, urban_base, features, profile,
         # Exclusiones
         excl = build_exclusion_mask(current.shape, profile, scenario, cenote_dist, lst_map, karst_vuln)
         p_total[excl] = 0
+        if int(excl.sum()) > 0:
+            log.info(f"      {int(excl.sum()):,} celdas excluidas ({excl.sum()/current.size*100:.1f}%)")
 
         # Convertir N celdas
         n_convert = int(current.sum() * CA_CONFIG["annual_growth_rate"])

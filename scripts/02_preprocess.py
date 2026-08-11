@@ -114,21 +114,29 @@ def compute_distance_to_urban_edge(urban: np.ndarray) -> np.ndarray:
     return (dist_pixels * PIXEL_RESOLUTION).astype(np.float32)
 
 
-def compute_distance_to_center(shape: tuple, transform) -> np.ndarray:
+def compute_distance_to_center(shape: tuple, transform, crs: str) -> np.ndarray:
     """
     Distancia de cada píxel al centro histórico de Mérida (Plaza Grande).
+
+    El centro se almacena en grados (lon/lat) pero el raster está en el CRS de
+    estudio (UTM), así que se transforma al CRS del raster antes de convertir
+    a píxeles.
     """
-    import rasterio
+    from pyproj import Transformer
     from rasterio.transform import rowcol
 
     rows, cols = shape
     center_lon, center_lat = STUDY_AREA["center"]
 
+    # Centro histórico al CRS del raster (p. ej. EPSG:32616)
+    transformer = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+    cx, cy = transformer.transform(center_lon, center_lat)
+
     # Crear grid de coordenadas
     row_idx, col_idx = np.mgrid[0:rows, 0:cols]
 
     # Convertir centro histórico a píxeles
-    center_row, center_col = rowcol(transform, center_lon, center_lat)
+    center_row, center_col = rowcol(transform, cx, cy)
 
     dist_pixels = np.sqrt(
         (row_idx - center_row)**2 + (col_idx - center_col)**2
@@ -314,7 +322,7 @@ def extract_features(year: int, urban: np.ndarray, lst, transform, crs: str,
     f0 = compute_distance_to_urban_edge(urban)
     log.info("    f0 dist_urban_edge ✓")
 
-    f1 = compute_distance_to_center(shape, transform)
+    f1 = compute_distance_to_center(shape, transform, crs)
     log.info("    f1 dist_center ✓")
 
     f2 = compute_distance_to_roads(PATHS["roads"], shape, transform, crs)
