@@ -41,7 +41,10 @@ SC_LABEL = {"no_plan": "Sin planificación", "plan_trad": "Plan tradicional", "i
 SC_COLOR = {"no_plan": "#E53935", "plan_trad": "#43A047", "ia_optimo": "#7C4DFF"}
 
 OUT_CSV = ROOT / "results" / "reports" / "indicadores_ambientales.csv"
+OUT_CSV_ANUAL = ROOT / "results" / "reports" / "indicadores_ambientales_anual.csv"
 OUT_PNG = ROOT / "results" / "reports" / "indicadores_ambientales.png"
+
+YEARS = [2026, 2027, 2028, 2029, 2030]
 
 
 def main():
@@ -63,6 +66,7 @@ def main():
         base = l.read(1) == 1  # urbano 2024
 
     rows = []
+    rows_anual = []
     for sc in SCENARIOS:
         ext = ROOT / "results" / "maps" / f"urban_extent_2030_{sc}.tif"
         if not ext.exists():
@@ -81,6 +85,29 @@ def main():
             "karst_nuevas": float(np.nanmean(karst[nuevas])) if nuevas.any() else np.nan,
             "verde_2030_pct": float(verde),
         })
+        # Series anuales sobre celdas nuevas acumuladas (extent del año − urbano 2024)
+        for yr in YEARS:
+            ey = ROOT / "results" / "maps" / f"urban_extent_{yr}_{sc}.tif"
+            if not ey.exists():
+                continue
+            with rasterio.open(ey) as e2:
+                urby = e2.read(1) == 1
+            ny = urby & ~base
+            rows_anual.append({
+                "year": yr,
+                "escenario": sc,
+                "celdas_nuevas": int(ny.sum()),
+                "lst_nuevas": float(np.nanmean(lst[ny])) if ny.any() else np.nan,
+                "ndvi_nuevas": float(np.nanmean(ndvi[ny])) if ny.any() else np.nan,
+                "dist_cenote_m": float(np.nanmean(cenote[ny])) if ny.any() else np.nan,
+                "karst_nuevas": float(np.nanmean(karst[ny])) if ny.any() else np.nan,
+                "verde_pct": float(100.0 * (1.0 - urby.sum() / urby.size)),
+            })
+
+    df_anual = pd.DataFrame(rows_anual)
+    if not df_anual.empty:
+        df_anual.to_csv(OUT_CSV_ANUAL, index=False)
+        print(f"[08] CSV anual guardado: {OUT_CSV_ANUAL}")
 
     df = pd.DataFrame(rows)
     if df.empty:

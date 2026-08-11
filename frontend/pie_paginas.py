@@ -32,8 +32,9 @@ def mapear_secciones(pdf_path, markers, primera="Portada"):
     for i, page in enumerate(reader.pages, 1):
         if i > 1:
             txt = (page.extract_text() or "").replace("\n", " ")
+            txt_l = txt.lower()
             for marker, name in markers:
-                if marker in txt:
+                if marker.lower() in txt_l:
                     current = name
                     break
         secciones[i] = current

@@ -352,19 +352,19 @@ tr:hover{background:rgba(91,45,142,.05)}
       <div class="data-card-sub">Inversión Estratégica con Jerarquía de Movilidad</div>
     </div>
     <div class="data-card">
-      <div class="data-card-label">Ahorro vs Sin Planificación</div>
-      <div class="data-card-value">196 km²</div>
-      <div class="data-card-sub">de expansión urbana evitada</div>
+      <div class="data-card-label">Expansión vs Sin Planificación</div>
+      <div class="data-card-value">−36%</div>
+      <div class="data-card-sub">menos celdas urbanizadas (3,047 → 1,953)</div>
     </div>
     <div class="data-card">
-      <div class="data-card-label">Retorno de Inversión</div>
-      <div class="data-card-value" style="color:var(--c-green)">4.5:1</div>
-      <div class="data-card-sub">x2 mejor que plan tradicional</div>
+      <div class="data-card-label">Compactación Urbana</div>
+      <div class="data-card-value" style="color:var(--c-green)">144 parches</div>
+      <div class="data-card-sub">vs 242 sin plan · 40% menos fragmentación</div>
     </div>
     <div class="data-card">
-      <div class="data-card-label">Reducción de Temperatura</div>
-      <div class="data-card-value" style="color:var(--c-green)">−0.9°C</div>
-      <div class="data-card-sub">única proyección que reduce LST</div>
+      <div class="data-card-label">Expansión Más Fresca</div>
+      <div class="data-card-value" style="color:var(--c-green)">−1.7°C</div>
+      <div class="data-card-sub">LST de celdas nuevas (31.2 → 29.5 °C)</div>
     </div>
   </div>
 
@@ -392,7 +392,7 @@ tr:hover{background:rgba(91,45,142,.05)}
         <div class="ctrl-label">Año de proyección</div>
         <div class="year-big" id="year-display">2026</div>
         <div class="year-sub">desliza para comparar</div>
-        <input type="range" class="custom-slider" id="year-slider" min="0" max="6" step="1" value="2" oninput="updateYear(this.value)">
+        <input type="range" class="custom-slider" id="year-slider" min="0" max="5" step="1" value="1" oninput="updateYear(this.value)">
         <div class="year-marks"><span>2024</span><span>2030</span></div>
       </div>
       <div class="ctrl-group">
@@ -410,17 +410,17 @@ tr:hover{background:rgba(91,45,142,.05)}
         <div class="city-wrap">
           <div class="city-label"><div class="city-label-dot" style="background:var(--c-red)"></div><span style="color:var(--c-red)">Sin plan (A)</span></div>
           <canvas class="city-canvas" id="c3d-no"></canvas>
-          <div class="city-stat" id="stat-no" style="color:var(--c-red)">820 km²</div>
+          <div class="city-stat" id="stat-no" style="color:var(--c-red)">14.6 km²</div>
         </div>
         <div class="city-wrap">
           <div class="city-label"><div class="city-label-dot" style="background:var(--c-green)"></div><span style="color:var(--c-green)">Plan trad. (B)</span></div>
           <canvas class="city-canvas" id="c3d-si"></canvas>
-          <div class="city-stat" id="stat-si" style="color:var(--c-green)">820 km²</div>
+          <div class="city-stat" id="stat-si" style="color:var(--c-green)">14.6 km²</div>
         </div>
         <div class="city-wrap">
           <div class="city-label"><div class="city-label-dot" style="background:var(--c-purple)"></div><span style="color:var(--c-purple)">IA (C) ⭐</span></div>
           <canvas class="city-canvas" id="c3d-ai"></canvas>
-          <div class="city-stat" id="stat-ai" style="color:var(--c-purple)">820 km²</div>
+          <div class="city-stat" id="stat-ai" style="color:var(--c-purple)">14.6 km²</div>
         </div>
       </div>
     </div>
@@ -429,16 +429,16 @@ tr:hover{background:rgba(91,45,142,.05)}
       <div class="metric-card">
         <div class="metric-name">Área urbana (km²)</div>
         <div class="metric-vals">
-          <div class="metric-row"><span class="metric-sc-label" style="color:var(--c-red)">Sin plan</span><span class="metric-val" id="m-no">820</span></div>
+          <div class="metric-row"><span class="metric-sc-label" style="color:var(--c-red)">Sin plan</span><span class="metric-val" id="m-no">14.62</span></div>
           <div class="metric-bar-bg"><div class="metric-bar" id="b-no" style="background:var(--c-red);width:80%"></div></div>
-          <div class="metric-row" style="margin-top:4px"><span class="metric-sc-label" style="color:var(--c-green)">Plan</span><span class="metric-val" id="m-si">820</span></div>
+          <div class="metric-row" style="margin-top:4px"><span class="metric-sc-label" style="color:var(--c-green)">Plan</span><span class="metric-val" id="m-si">14.62</span></div>
           <div class="metric-bar-bg"><div class="metric-bar" id="b-si" style="background:var(--c-green);width:80%"></div></div>
-          <div class="metric-row" style="margin-top:4px"><span class="metric-sc-label" style="color:var(--c-purple)">IA ⭐</span><span class="metric-val" id="m-ai">820</span></div>
+          <div class="metric-row" style="margin-top:4px"><span class="metric-sc-label" style="color:var(--c-purple)">IA ⭐</span><span class="metric-val" id="m-ai">14.62</span></div>
           <div class="metric-bar-bg"><div class="metric-bar" id="b-ai" style="background:var(--c-purple);width:80%"></div></div>
         </div>
       </div>
       <div class="metric-card">
-        <div class="metric-name">Fragmentación</div>
+        <div class="metric-name">Parches urbanos</div>
         <div class="metric-vals">
           <div class="metric-row"><span class="metric-sc-label" style="color:var(--c-red)">Sin plan</span><span class="metric-val" id="f-no">0.32</span></div>
           <div class="metric-row" style="margin-top:4px"><span class="metric-sc-label" style="color:var(--c-green)">Plan</span><span class="metric-val" id="f-si">0.32</span></div>
@@ -470,12 +470,12 @@ tr:hover{background:rgba(91,45,142,.05)}
     <tr><td>Protección cenotes</td><td>Ninguna</td></tr>
   </table>
   <div style="margin-top:16px">
-    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">2030: Área urbana</span><span class="scenario-value" style="color:var(--c-red)">1,017 km² (+197)</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">Fragmentación</span><span class="scenario-value" style="color:var(--c-red)">0.67 (CRÍTICA)</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">LST (°C)</span><span class="scenario-value" style="color:var(--c-red)">36.7 (+3.6)</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">Vulnerabilidad acuífera</span><span class="scenario-value" style="color:var(--c-red)">0.68 (CRÍTICA)</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">Calidad de vida</span><span class="scenario-value" style="color:var(--c-red)">53/100</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">ROI</span><span class="scenario-value" style="color:var(--c-red)">NEGATIVO</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">2030: Área urbana</span><span class="scenario-value" style="color:var(--c-red)">17.4 km² (+2.7)</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">Parches urbanos</span><span class="scenario-value" style="color:var(--c-red)">242 (dispersa)</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">LST celdas nuevas (°C)</span><span class="scenario-value" style="color:var(--c-red)">31.2</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">Dist. a cenotes (m)</span><span class="scenario-value" style="color:var(--c-red)">2,948</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">Vuln. kárstica</span><span class="scenario-value" style="color:var(--c-red)">0.314</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-red)"><span class="scenario-label">Suelo no urbano</span><span class="scenario-value" style="color:var(--c-red)">78.6%</span></div>
   </div>
 
   <div class="section-title amber" style="margin-top:24px">🟡 Escenario B: Plan Mixto (Reaccionario)</div>
@@ -489,11 +489,11 @@ tr:hover{background:rgba(91,45,142,.05)}
     <tr><td>Protección cenotes</td><td>200 m radio</td></tr>
   </table>
   <div style="margin-top:16px">
-    <div class="scenario-row" style="border-left:4px solid var(--c-amber)"><span class="scenario-label">2030: Área urbana</span><span class="scenario-value" style="color:var(--c-amber)">958 km² (+138)</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-amber)"><span class="scenario-label">Fragmentación</span><span class="scenario-value" style="color:var(--c-amber)">0.26 (baja)</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-amber)"><span class="scenario-label">LST (°C)</span><span class="scenario-value" style="color:var(--c-amber)">33.5 (+0.6)</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-amber)"><span class="scenario-label">Calidad de vida</span><span class="scenario-value" style="color:var(--c-amber)">80/100</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-amber)"><span class="scenario-label">ROI</span><span class="scenario-value" style="color:var(--c-amber)">2.1:1</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-amber)"><span class="scenario-label">2030: Área urbana</span><span class="scenario-value" style="color:var(--c-amber)">17.0 km² (+2.4)</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-amber)"><span class="scenario-label">Parches urbanos</span><span class="scenario-value" style="color:var(--c-amber)">207 (intermedia)</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-amber)"><span class="scenario-label">LST celdas nuevas (°C)</span><span class="scenario-value" style="color:var(--c-amber)">31.2</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-amber)"><span class="scenario-label">Dist. a cenotes (m)</span><span class="scenario-value" style="color:var(--c-amber)">2,895</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-amber)"><span class="scenario-label">Suelo no urbano</span><span class="scenario-value" style="color:var(--c-amber)">79.0%</span></div>
   </div>
 
   <div class="section-title green" style="margin-top:24px">🟢 Escenario C: Inversión Estratégica ⭐ RECOMENDADO</div>
@@ -507,12 +507,12 @@ tr:hover{background:rgba(91,45,142,.05)}
     <tr><td>Protección cenotes</td><td>200 m + vigilancia</td></tr>
   </table>
   <div style="margin-top:16px">
-    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">2030: Área urbana</span><span class="scenario-value" style="color:var(--c-green)">911 km² (+91) COMPACTA</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">Fragmentación</span><span class="scenario-value" style="color:var(--c-green)">0.20 (ESTÁNDAR)</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">LST (°C)</span><span class="scenario-value" style="color:var(--c-green)">32.0 (−0.9) ✓</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">Vulnerabilidad acuífera</span><span class="scenario-value" style="color:var(--c-green)">0.24 (CONTROLADA)</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">Calidad de vida</span><span class="scenario-value" style="color:var(--c-green)">87/100</span></div>
-    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">ROI</span><span class="scenario-value" style="color:var(--c-green)">4.5:1 ✓✓</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">2030: Área urbana</span><span class="scenario-value" style="color:var(--c-green)">16.4 km² (+1.8) COMPACTA</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">Parches urbanos</span><span class="scenario-value" style="color:var(--c-green)">144 (compacta)</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">LST celdas nuevas (°C)</span><span class="scenario-value" style="color:var(--c-green)">29.5 (−1.7) ✓</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">Dist. a cenotes (m)</span><span class="scenario-value" style="color:var(--c-green)">3,126 ✓</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">Vuln. kárstica</span><span class="scenario-value" style="color:var(--c-green)">0.300</span></div>
+    <div class="scenario-row" style="border-left:4px solid var(--c-green)"><span class="scenario-label">Suelo no urbano</span><span class="scenario-value" style="color:var(--c-green)">79.8% ✓</span></div>
   </div>
 </div>
 
@@ -546,7 +546,7 @@ tr:hover{background:rgba(91,45,142,.05)}
   <div class="investment-item" style="border-left-color:var(--c-purple)">
     <div class="investment-name">💧 Protección de Cenotes + Monitoreo Acuífero</div>
     <div class="investment-amount">$200 MDP</div>
-    <div class="investment-impact">Exclusión permanente 200 m radio | Vigilancia kárstica | Vulnerabilidad 0.24 (controlada)</div>
+    <div class="investment-impact">Exclusión permanente 200 m radio | Vigilancia kárstica | Celdas nuevas 3,126 m de cenotes</div>
   </div>
   <div class="investment-item" style="border-left-color:var(--c-purple)">
     <div class="investment-name">🎫 Integración Tarifaria, Mejora Cobertura TP</div>
@@ -567,7 +567,7 @@ tr:hover{background:rgba(91,45,142,.05)}
   <div style="background:rgba(0,200,150,.1);border-left:4px solid var(--c-green);border-radius:0 8px 8px 0;padding:14px 16px;margin-top:16px">
     <div style="font-size:11px;font-weight:700;color:var(--c-green);margin-bottom:6px">💚 TOTAL INVERSIÓN</div>
     <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--c-green)">$1,600 MDP</div>
-    <div style="font-size:10px;color:var(--text-2);margin-top:6px">Proyección 2030: 911 km² (compacta) | Fragmentación 0.20 | ROI 4.5:1</div>
+    <div style="font-size:10px;color:var(--text-2);margin-top:6px">Proyección 2030: 16.4 km² (compacta) | 144 parches | LST −1.7 °C en celdas nuevas</div>
   </div>
 </div>
 
@@ -581,33 +581,33 @@ tr:hover{background:rgba(91,45,142,.05)}
       <div class="comparison-cell">Escenario B</div>
       <div class="comparison-cell">Escenario C ⭐</div>
     </div>
-    <div class="comparison-row"><div class="comparison-cell comparison-label">Área urbana (km²)</div><div class="comparison-cell comparison-val-a">1,017 (+197)</div><div class="comparison-cell comparison-val-b">958 (+138)</div><div class="comparison-cell comparison-val-c">911 (+91) ✓</div></div>
-    <div class="comparison-row"><div class="comparison-cell comparison-label">Fragmentación</div><div class="comparison-cell comparison-val-a">0.67 CRÍTICA</div><div class="comparison-cell comparison-val-b">0.26 baja</div><div class="comparison-cell comparison-val-c">0.20 compacta ✓</div></div>
-    <div class="comparison-row"><div class="comparison-cell comparison-label">Cobertura verde (%)</div><div class="comparison-cell comparison-val-a">5%</div><div class="comparison-cell comparison-val-b">23%</div><div class="comparison-cell comparison-val-c">29% ✓</div></div>
-    <div class="comparison-row"><div class="comparison-cell comparison-label">LST (°C)</div><div class="comparison-cell comparison-val-a">36.7 (+3.6)</div><div class="comparison-cell comparison-val-b">33.5 (+0.6)</div><div class="comparison-cell comparison-val-c">32.0 (−0.9) ✓</div></div>
-    <div class="comparison-row"><div class="comparison-cell comparison-label">Vulnerabilidad acuífera</div><div class="comparison-cell comparison-val-a">0.68 crítica</div><div class="comparison-cell comparison-val-b">0.36 moderada</div><div class="comparison-cell comparison-val-c">0.24 controlada ✓</div></div>
-    <div class="comparison-row"><div class="comparison-cell comparison-label">Calidad de vida (0–100)</div><div class="comparison-cell comparison-val-a">53</div><div class="comparison-cell comparison-val-b">80</div><div class="comparison-cell comparison-val-c">87 ✓</div></div>
-    <div class="comparison-row"><div class="comparison-cell comparison-label">Cobertura movilidad (%)</div><div class="comparison-cell comparison-val-a">45%</div><div class="comparison-cell comparison-val-b">62%</div><div class="comparison-cell comparison-val-c">79% ✓</div></div>
-    <div class="comparison-row"><div class="comparison-cell comparison-label">Dependencia auto</div><div class="comparison-cell comparison-val-a">ALTA</div><div class="comparison-cell comparison-val-b">MEDIA</div><div class="comparison-cell comparison-val-c">BAJA ✓</div></div>
-    <div class="comparison-row"><div class="comparison-cell comparison-label">ROI (1,500 MDP)</div><div class="comparison-cell comparison-val-a">Negativo</div><div class="comparison-cell comparison-val-b">2.1:1</div><div class="comparison-cell comparison-val-c">4.5:1 ✓✓</div></div>
+    <div class="comparison-row"><div class="comparison-cell comparison-label">Área urbana (km²)</div><div class="comparison-cell comparison-val-a">17.4 (+2.7)</div><div class="comparison-cell comparison-val-b">17.0 (+2.4)</div><div class="comparison-cell comparison-val-c">16.4 (+1.8) ✓</div></div>
+    <div class="comparison-row"><div class="comparison-cell comparison-label">Parches urbanos</div><div class="comparison-cell comparison-val-a">242 dispersa</div><div class="comparison-cell comparison-val-b">207 intermedia</div><div class="comparison-cell comparison-val-c">144 compacta ✓</div></div>
+    <div class="comparison-row"><div class="comparison-cell comparison-label">Suelo no urbano (%)</div><div class="comparison-cell comparison-val-a">78.6%</div><div class="comparison-cell comparison-val-b">79.0%</div><div class="comparison-cell comparison-val-c">79.8% ✓</div></div>
+    <div class="comparison-row"><div class="comparison-cell comparison-label">LST celdas nuevas (°C)</div><div class="comparison-cell comparison-val-a">31.2</div><div class="comparison-cell comparison-val-b">31.2</div><div class="comparison-cell comparison-val-c">29.5 (−1.7) ✓</div></div>
+    <div class="comparison-row"><div class="comparison-cell comparison-label">Dist. a cenotes (m)</div><div class="comparison-cell comparison-val-a">2,948</div><div class="comparison-cell comparison-val-b">2,895</div><div class="comparison-cell comparison-val-c">3,126 ✓</div></div>
+    <div class="comparison-row"><div class="comparison-cell comparison-label">Vuln. kárstica celdas nuevas</div><div class="comparison-cell comparison-val-a">0.314</div><div class="comparison-cell comparison-val-b">0.313</div><div class="comparison-cell comparison-val-c">0.300 ✓</div></div>
+    <div class="comparison-row"><div class="comparison-cell comparison-label">NDVI celdas nuevas</div><div class="comparison-cell comparison-val-a">0.32</div><div class="comparison-cell comparison-val-b">0.30</div><div class="comparison-cell comparison-val-c">0.34 ✓</div></div>
+    <div class="comparison-row"><div class="comparison-cell comparison-label">Celdas urbanizadas nuevas</div><div class="comparison-cell comparison-val-a">3,047</div><div class="comparison-cell comparison-val-b">2,676</div><div class="comparison-cell comparison-val-c">1,953 ✓</div></div>
+    <div class="comparison-row"><div class="comparison-cell comparison-label">Crecimiento vs base</div><div class="comparison-cell comparison-val-a">+18.7%</div><div class="comparison-cell comparison-val-b">+16.5%</div><div class="comparison-cell comparison-val-c">+12.0% ✓</div></div>
   </div>
 
   <div class="section-title green">📈 Series Temporales 2024–2030</div>
   <div class="charts-grid">
     <div class="chart-card"><div class="chart-header"><div class="chart-name">Área urbana (km²)</div></div><div class="chart-area"><canvas id="ch-area"></canvas></div></div>
-    <div class="chart-card"><div class="chart-header"><div class="chart-name">Fragmentación</div></div><div class="chart-area"><canvas id="ch-frag"></canvas></div></div>
-    <div class="chart-card"><div class="chart-header"><div class="chart-name">Verde (%)</div></div><div class="chart-area"><canvas id="ch-verde"></canvas></div></div>
-    <div class="chart-card"><div class="chart-header"><div class="chart-name">Calidad de vida</div></div><div class="chart-area"><canvas id="ch-vida"></canvas></div></div>
-    <div class="chart-card"><div class="chart-header"><div class="chart-name">LST (°C)</div></div><div class="chart-area"><canvas id="ch-lst"></canvas></div></div>
-    <div class="chart-card"><div class="chart-header"><div class="chart-name">Vulnerabilidad kárstica</div></div><div class="chart-area"><canvas id="ch-karst"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-name">Parches urbanos</div></div><div class="chart-area"><canvas id="ch-frag"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-name">Suelo no urbano (%)</div></div><div class="chart-area"><canvas id="ch-verde"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-name">Dist. a cenotes (m)</div></div><div class="chart-area"><canvas id="ch-vida"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-name">LST celdas nuevas (°C)</div></div><div class="chart-area"><canvas id="ch-lst"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-name">Vuln. kárstica celdas nuevas</div></div><div class="chart-area"><canvas id="ch-karst"></canvas></div></div>
   </div>
 
-  <div class="section-title green">💰 Beneficios Económicos (Escenario C vs. A)</div>
+  <div class="section-title green">💚 Beneficios Espaciales (Escenario C vs. A)</div>
   <div class="comparison-cards">
-    <div class="benefit-card"><div class="benefit-icon">🏞️</div><div class="benefit-title">Tierra Preservada</div><div class="benefit-value">26B</div><div class="benefit-unit">pesos</div></div>
-    <div class="benefit-card"><div class="benefit-icon">💧</div><div class="benefit-title">Ahorro Anual Agua</div><div class="benefit-value">47M</div><div class="benefit-unit">pesos/año</div></div>
-    <div class="benefit-card"><div class="benefit-icon">🌡️</div><div class="benefit-title">Reducción LST</div><div class="benefit-value">−0.9°C</div><div class="benefit-unit">única que reduce</div></div>
-    <div class="benefit-card"><div class="benefit-icon">💯</div><div class="benefit-title">Mejor ROI</div><div class="benefit-value">4.5:1</div><div class="benefit-unit">2x vs Plan B</div></div>
+    <div class="benefit-card"><div class="benefit-icon">🏘️</div><div class="benefit-title">Menos Expansión</div><div class="benefit-value">−36%</div><div class="benefit-unit">celdas nuevas (3,047 → 1,953)</div></div>
+    <div class="benefit-card"><div class="benefit-icon">🧩</div><div class="benefit-title">Menos Parches</div><div class="benefit-value">−40%</div><div class="benefit-unit">242 → 144 parches urbanos</div></div>
+    <div class="benefit-card"><div class="benefit-icon">🌡️</div><div class="benefit-title">LST Más Fresca</div><div class="benefit-value">−1.7°C</div><div class="benefit-unit">en las celdas nuevas</div></div>
+    <div class="benefit-card"><div class="benefit-icon">💧</div><div class="benefit-title">Más Lejos de Cenotes</div><div class="benefit-value">+178 m</div><div class="benefit-unit">3,126 vs 2,948 m</div></div>
   </div>
 </div>
 
@@ -741,23 +741,23 @@ tr:hover{background:rgba(91,45,142,.05)}
   <div class="comparison-cards">
     <div class="benefit-card" style="background:linear-gradient(135deg,rgba(0,200,150,.1),rgba(0,200,150,.05))">
       <div class="benefit-icon">🏘️</div><div class="benefit-title">Compactación Urbana</div>
-      <div style="font-size:13px;font-weight:700;color:var(--c-green);margin:6px 0">911 km²</div>
-      <div style="font-size:10px;color:var(--text-2)">vs 1,017 (A) | Fragmentación 0.20</div>
+      <div style="font-size:13px;font-weight:700;color:var(--c-green);margin:6px 0">16.4 km²</div>
+      <div style="font-size:10px;color:var(--text-2)">vs 17.4 (A) | 144 parches</div>
     </div>
     <div class="benefit-card" style="background:linear-gradient(135deg,rgba(0,212,255,.1),rgba(0,212,255,.05))">
       <div class="benefit-icon">💧</div><div class="benefit-title">Protección Acuífera</div>
-      <div style="font-size:13px;font-weight:700;color:var(--c-cyan);margin:6px 0">0.24 índice</div>
-      <div style="font-size:10px;color:var(--text-2)">Vulnerabilidad controlada | 47M $/año</div>
+      <div style="font-size:13px;font-weight:700;color:var(--c-cyan);margin:6px 0">3,126 m</div>
+      <div style="font-size:10px;color:var(--text-2)">Dist. a cenotes | 178 m más que (A)</div>
     </div>
     <div class="benefit-card" style="background:linear-gradient(135deg,rgba(168,85,247,.1),rgba(168,85,247,.05))">
       <div class="benefit-icon">🌡️</div><div class="benefit-title">Mitigación Térmica</div>
-      <div style="font-size:13px;font-weight:700;color:var(--c-purple);margin:6px 0">−0.9°C</div>
-      <div style="font-size:10px;color:var(--text-2)">Única que reduce LST | Combate isla de calor</div>
+      <div style="font-size:13px;font-weight:700;color:var(--c-purple);margin:6px 0">−1.7°C</div>
+      <div style="font-size:10px;color:var(--text-2)">LST de celdas nuevas | Combate isla de calor</div>
     </div>
     <div class="benefit-card" style="background:linear-gradient(135deg,rgba(255,77,77,.1),rgba(255,77,77,.05))">
       <div class="benefit-icon">💰</div><div class="benefit-title">Retorno Inversión</div>
-      <div style="font-size:13px;font-weight:700;color:var(--c-red);margin:6px 0">4.5:1</div>
-      <div style="font-size:10px;color:var(--text-2)">2x mejor que Plan Mixto | 26B pesos tierra</div>
+      <div style="font-size:13px;font-weight:700;color:var(--c-red);margin:6px 0">−36%</div>
+      <div style="font-size:10px;color:var(--text-2)">Celdas nuevas vs (A) | 1,094 menos</div>
     </div>
   </div>
 
@@ -792,22 +792,23 @@ function switchTab(id){
   if (id === 'indicadores') setTimeout(initCharts, 60);
 }
 
-/* ============== DATA ============== */
-const YEARS = [2024,2025,2026,2027,2028,2029,2030];
+/* ============== DATA (valores reales del pipeline v2.0) ============== */
+/* Área urbana clasificada (km²) por año y escenario: results/reports/area_statistics.csv */
+const YEARS = [2024,2026,2027,2028,2029,2030];
 const LABELS = YEARS.map(String);
 const D = {
-  area:  { no:[820,849,879,911,945,980,1017], si:[820,843,866,890,913,936,958], ai:[820,838,856,872,887,900,911] },
-  frag:  { no:[.32,.37,.42,.48,.55,.61,.67],  si:[.32,.31,.30,.29,.28,.27,.26], ai:[.32,.29,.27,.25,.23,.21,.20] },
-  verde: { no:[18,16,14,11,9,7,5],            si:[18,18,19,20,21,22,23],        ai:[18,19,21,23,25,27,29] },
-  vida:  { no:[72,70,67,64,61,57,53],         si:[72,73,74,75,77,78,80],        ai:[72,74,76,79,81,84,87] },
-  lst:   { no:[33.1,33.5,34.0,34.6,35.2,35.9,36.7], si:[33.1,33.2,33.3,33.3,33.4,33.4,33.5], ai:[33.1,33.0,32.8,32.6,32.4,32.2,32.0] },
-  karst: { no:[.41,.44,.48,.52,.57,.62,.68],  si:[.41,.40,.39,.38,.38,.37,.36], ai:[.41,.38,.35,.32,.29,.27,.24] }
+  area:  { no:[14.62,15.13,15.66,16.21,16.78,17.36], si:[14.62,15.07,15.54,16.02,16.52,17.03], ai:[14.62,14.96,15.30,15.65,16.01,16.38] },
+  frag:  { no:[98,127,131,145,190,242],             si:[98,133,126,143,173,207],             ai:[98,120,112,112,127,144] },
+  verde: { no:[81.95,81.32,80.67,79.99,79.29,78.57], si:[81.95,81.39,80.82,80.22,79.61,78.98], ai:[81.95,81.54,81.11,80.68,80.24,79.78] },
+  vida:  { no:[2571,2571,2585,2704,2839,2948],      si:[2658,2658,2662,2698,2786,2895],      ai:[2936,2936,2887,2884,3015,3126] },
+  lst:   { no:[31.61,31.61,31.71,31.55,31.33,31.18], si:[30.99,30.99,31.35,31.53,31.39,31.20], ai:[29.50,29.50,29.50,29.50,29.50,29.50] },
+  karst: { no:[.30,.30,.31,.31,.31,.31],            si:[.31,.31,.31,.31,.31,.31],            ai:[.30,.30,.30,.30,.30,.30] }
 };
 const C = { no:'#ff4d4d', si:'#00c896', ai:'#a855f7' };
 const F = { no:'rgba(255,77,77,.08)', si:'rgba(0,200,150,.08)', ai:'rgba(168,85,247,.08)' };
 
 /* ============== 3D VIEW ============== */
-let CY = 2;
+let CY = 1;
 let chartsInit = false;
 
 function updateYear(v){
@@ -818,16 +819,16 @@ function updateYear(v){
 }
 
 function updateMetrics(i){
-  const maxArea = 1017;
-  document.getElementById('m-no').textContent = D.area.no[i];
-  document.getElementById('m-si').textContent = D.area.si[i];
-  document.getElementById('m-ai').textContent = D.area.ai[i];
+  const maxArea = 17.4;
+  document.getElementById('m-no').textContent = D.area.no[i].toFixed(2);
+  document.getElementById('m-si').textContent = D.area.si[i].toFixed(2);
+  document.getElementById('m-ai').textContent = D.area.ai[i].toFixed(2);
   document.getElementById('b-no').style.width = (D.area.no[i]/maxArea*100)+'%';
   document.getElementById('b-si').style.width = (D.area.si[i]/maxArea*100)+'%';
   document.getElementById('b-ai').style.width = (D.area.ai[i]/maxArea*100)+'%';
-  document.getElementById('f-no').textContent = D.frag.no[i].toFixed(2);
-  document.getElementById('f-si').textContent = D.frag.si[i].toFixed(2);
-  document.getElementById('f-ai').textContent = D.frag.ai[i].toFixed(2);
+  document.getElementById('f-no').textContent = D.frag.no[i];
+  document.getElementById('f-si').textContent = D.frag.si[i];
+  document.getElementById('f-ai').textContent = D.frag.ai[i];
   document.getElementById('l-no').textContent = D.lst.no[i].toFixed(1);
   document.getElementById('l-si').textContent = D.lst.si[i].toFixed(1);
   document.getElementById('l-ai').textContent = D.lst.ai[i].toFixed(1);
@@ -967,12 +968,12 @@ function mkChart(id, d1, d2, d3, type='line', yOpts={}){
 function initCharts(){
   if (chartsInit) return;
   chartsInit = true;
-  mkChart('ch-area',  D.area.no,  D.area.si,  D.area.ai);
-  mkChart('ch-frag',  D.frag.no,  D.frag.si,  D.frag.ai,  'line', {min:0, max:.8});
-  mkChart('ch-verde', D.verde.no, D.verde.si, D.verde.ai);
-  mkChart('ch-vida',  D.vida.no,  D.vida.si,  D.vida.ai,  'line', {min:40, max:100});
-  mkChart('ch-lst',   D.lst.no,   D.lst.si,   D.lst.ai,   'line', {min:31, max:38});
-  mkChart('ch-karst', D.karst.no, D.karst.si, D.karst.ai, 'line', {min:0,  max:.8});
+  mkChart('ch-area',  D.area.no,  D.area.si,  D.area.ai, 'line', {min:14, max:18});
+  mkChart('ch-frag',  D.frag.no,  D.frag.si,  D.frag.ai, 'line', {min:0,  max:260});
+  mkChart('ch-verde', D.verde.no, D.verde.si, D.verde.ai, 'line', {min:78, max:83});
+  mkChart('ch-vida',  D.vida.no,  D.vida.si,  D.vida.ai, 'line', {min:2500, max:3200});
+  mkChart('ch-lst',   D.lst.no,   D.lst.si,   D.lst.ai, 'line', {min:29, max:32.5});
+  mkChart('ch-karst', D.karst.no, D.karst.si, D.karst.ai, 'line', {min:0.29, max:0.32});
 }
 
 /* ============== AI PLANNER ============== */

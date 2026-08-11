@@ -30,6 +30,8 @@ con visualización interactiva.
 │   ├── reporte_tecnico.pdf        # Reporte técnico completo (pipeline + tasas + seguridad)
 │   ├── generar_prototipo_pdf.py   # PDF imprimible del prototipo 3D interactivo
 │   ├── prototipo_3d.pdf           # Prototipo 3D en PDF (portada + 4 secciones)
+│   ├── generar_dashboard_integrado_pdf.py  # PDF del dashboard integrado (9 secciones)
+│   ├── dashboard_integrado.pdf    # Dashboard integrado en PDF (portada + 9 secciones)
 │   ├── merida_combined_dashboard.html  # Prototipo A: dashboard integrado (9 secciones)
 │   ├── merida_urban_expansion_3d_comparison.html  # Prototipo B: simulador 3D técnico
 │   └── pie_paginas.py             # Pie de página (sección + numeración) para los PDFs
@@ -268,6 +270,7 @@ python scripts/08_indicadores_ambientales.py  # CSV+PNG de indicadores ambiental
 python frontend/generar_dashboard.py     # HTML + PDF imprimible (14 páginas)
 python frontend/generar_reporte_pdf.py   # PDF del reporte técnico (8 páginas)
 python frontend/generar_prototipo_pdf.py # PDF del prototipo 3D (5 páginas)
+python frontend/generar_dashboard_integrado_pdf.py  # PDF del dashboard integrado (12 páginas)
 ```
 
 El paso **08** cruza los extents simulados 2030 con las features reales
@@ -290,7 +293,7 @@ espera a Chart.js (CDN) para que los gráficos rendericen antes de exportar.
 
 | Archivo | Cuál es | Contenido |
 |---------|---------|-----------|
-| `frontend/merida_combined_dashboard.html` | **Prototipo A · Dashboard integrado** | 9 secciones: resumen con hallazgos (196 km² evitados, retorno 4.5:1), vista 3D, 3 escenarios, inversión 1,500 MDP, indicadores, planificador IA, propuestas ciudadanas, marco legal y comparativa final. Versión orientada a presentación de política pública. |
+| `frontend/merida_combined_dashboard.html` | **Prototipo A · Dashboard integrado** | 9 secciones: resumen con hallazgos (196 km² evitados, retorno 4.5:1), vista 3D, 3 escenarios, inversión 1,500 MDP, indicadores, planificador IA, propuestas ciudadanas, marco legal y comparativa final. Versión orientada a presentación de política pública. Su PDF imprimible es `frontend/dashboard_integrado.pdf` (12 páginas). |
 | `frontend/merida_urban_expansion_3d_comparison.html` | **Prototipo B · Simulador 3D técnico** | 4 secciones: vista 3D comparativa, 6 indicadores 2024–2030 (área, fragmentación, verde, calidad de vida, LST, vulnerabilidad kárstica), planificador IA con parámetros CA y arquitectura del modelo. Es la fuente del PDF `prototipo_3d.pdf`. |
 
 El **dashboard oficial** de resultados (`frontend/dashboard_resultados.html`)
