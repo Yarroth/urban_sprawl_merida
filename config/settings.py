@@ -242,6 +242,28 @@ SAFETY_CONFIG = {
     # Crecimiento del parque vehicular de Yucatán (INEGI): +77% en una década
     # (~5.9%/año); >1.1M unidades en 2024–25 (crecimiento anual >6%).
     "fleet_growth_annual": 0.059,
+    # ── Validación con atropellamientos reales (prensa 2026) ──
+    # Corpus de reportes localizados por tramo (prensa local: Diario de
+    # Yucatán, Reporteros Hoy, InfoLliteras, Yucatán.com.mx, Sol Yucatán,
+    # Novedades). Muestra pequeña y sesgada hacia eventos fatales: útil como
+    # validación exploratoria, no como censo.
+    "incidentes_prensa": [
+        {"fecha": "2026-05-06", "sector": "N",   "fuente": "InfoLliteras", "nota": "periférico norte, 2ª muerte en <1 semana"},
+        {"fecha": "2026-03-30", "sector": "N",   "fuente": "prensa local", "nota": "muere cruzando el norte sin usar puente"},
+        {"fecha": "2026-07-01", "sector": "N",   "fuente": "Reporteros Hoy", "nota": "fallece al cruzar el tramo norte"},
+        {"fecha": "2026-06-19", "sector": "S",   "fuente": "Yucatán.com.mx", "nota": "Salvador Alvarado Sur / Kanasín"},
+        {"fecha": "2026-06-24", "sector": "S",   "fuente": "Yucatán.com.mx", "nota": "cerca de puente peatonal; 2º en la semana"},
+        {"fecha": "2026-07-02", "sector": "S",   "fuente": "Instagram/prensa", "nota": "km 7, atropellan a estudiante"},
+        {"fecha": "2026-07-05", "sector": "S",   "fuente": "Reporteros Hoy", "nota": "peatón grave en el periférico Sur"},
+        {"fecha": "2026-05-05", "sector": "S",   "fuente": "Reporteros Hoy", "nota": "km 5, cerca del puente de la Av. 86"},
+        {"fecha": "2026-06-19", "sector": "SE",  "fuente": "InfoLliteras", "nota": "periférico Sur Oriente, Mazda 2"},
+        {"fecha": "2026-05-01", "sector": "SW",  "fuente": "prensa local", "nota": "km 48, dos personas fallecen"},
+        {"fecha": "2026-07-08", "sector": "WSW", "fuente": "Diario de Yucatán", "nota": "grave atropellado en el Periférico Poniente"},
+        {"fecha": "2026-04-11", "sector": "E",   "fuente": "Novedades Yucatán", "nota": "incidente fatal en el periférico oriente"},
+        {"fecha": "2026-02-05", "sector": "E",   "fuente": "Sol Yucatán", "nota": "peatón muere en el Periférico Oriente"},
+        {"fecha": "2026-07-18", "sector": "E",   "fuente": "Reporteros Hoy", "nota": "accidente en intersección, entrada Col. Cactus"},
+        {"fecha": "2026-04-15", "sector": "E",   "fuente": "Instagram/prensa", "nota": "fallece atropellado en el oriente"},
+    ],
     # Levers por escenario (factores multiplicativos sobre la tasa de muertes):
     #   vol  = cambio de volumen vehicular (1.0 = sin cambio)
     #   speed= límite efectivo en tramos urbanos (km/h)

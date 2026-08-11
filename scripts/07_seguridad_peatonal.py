@@ -33,6 +33,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.stats import spearmanr
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -57,7 +58,9 @@ def _fmt(v):
         return str(int(v))
     if isinstance(v, (float, np.floating)):
         f = float(v)
-        return str(int(f)) if f.is_integer() else f"{f:.1f}"
+        if f.is_integer():
+            return str(int(f))
+        return f"{f:.3f}" if abs(f) < 1 else f"{f:.1f}"
     return str(v)
 
 
@@ -149,36 +152,82 @@ def temporal_analysis(segs):
 
 
 def radial_diagram(segs):
-    """Rosa de riesgo: 12 sectores del anillo en 360°, altura = muertes/año
-    (2025) y color = nivel de riesgo relativo."""
+    """Rosa de riesgo con doble anillo: exterior = muertes/año por sector
+    (2025, color YlOrRd) e interior = aforo vehicular (miles veh/día, azul),
+    para comparar riesgo y volumen lado a lado."""
     names = [s["name"] for s in segs]
     deaths = np.array([s["base_deaths"] for s in segs])
+    aadts = np.array([s["aadt"] for s in segs])
     n = len(segs)
     theta = np.deg2rad(np.arange(n) * 360.0 / n + 360.0 / n / 2)
     width = np.deg2rad(360.0 / n) * 0.9
+    d_max, a_max = deaths.max(), aadts.max()
 
     fig = plt.figure(figsize=(8.2, 8.2), dpi=VIZ_CONFIG["dpi"])
     ax = fig.add_subplot(111, projection="polar")
+
+    # Anillo interior: aforo vehicular (azul, escala propia 0–0.40 de radio)
+    ax.bar(theta, 0.40 * aadts / a_max, width=width, bottom=0.0,
+           color="#29B6F6", edgecolor="white", linewidth=0.6, alpha=0.85)
+    # Anillo exterior: muertes/año (riesgo, escala propia 0.52–1.00 de radio)
     norm = plt.Normalize(deaths.min(), deaths.max())
     cmap = plt.get_cmap("YlOrRd")
-    ax.bar(theta, deaths, width=width, color=cmap(norm(deaths)),
-           edgecolor="white", linewidth=0.6, alpha=0.95)
-    for t, nm, d in zip(theta, names, deaths):
-        ax.text(t, deaths.max() * 1.18, nm, ha="center", va="center", fontsize=9, fontweight="bold")
-        ax.text(t, d + deaths.max() * 0.07, f"{d:.1f}", ha="center", va="bottom", fontsize=8, color="#333")
+    ax.bar(theta, 0.48 * deaths / d_max, width=width, bottom=0.52,
+           color=cmap(norm(deaths)), edgecolor="white", linewidth=0.6, alpha=0.95)
+
+    for t, nm, d, a in zip(theta, names, deaths, aadts):
+        ax.text(t, 1.06, nm, ha="center", va="center", fontsize=9, fontweight="bold")
+        ax.text(t, 0.52 + 0.48 * d / d_max + 0.025, f"{d:.1f}", ha="center",
+                va="bottom", fontsize=8, color="#7A0000", fontweight="bold")
+        ax.text(t, 0.40 * a / a_max + 0.015, f"{a/1000:.0f}k", ha="center",
+                va="bottom", fontsize=7, color="#01579B", fontweight="bold")
+
     ax.set_theta_zero_location("N")
     ax.set_theta_direction(-1)   # sentido horario (N → NNE → … → WSW)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.spines["polar"].set_visible(False)
+
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     cbar = plt.colorbar(sm, ax=ax, pad=0.10, shrink=0.75)
     cbar.set_label("Muertes/año por sector (2025)")
+    ax.text(np.deg2rad(90), 0.20, "anillo interior = aforo vehicular (miles veh/día)",
+            ha="center", fontsize=8, color="#01579B")
     ax.set_title("Riesgo peatonal por sector — Anillo Periférico de Mérida", pad=30, fontsize=13)
     fig.tight_layout()
     fig.savefig(OUT / "anillo_sectores.png", bbox_inches="tight")
     plt.close(fig)
     log.info("Radial: %s (más riesgo) → %s (menos riesgo)", names[int(np.argmax(deaths))], names[int(np.argmin(deaths))])
+
+
+def validar_pesos(segs):
+    """Valida los pesos del atlas contra los atropellamientos reales de prensa
+    (2026). Compara el ranking de peso del atlas y el riesgo final del modelo
+    (muertes base por sector) con la distribución observada de incidentes."""
+    names = [s["name"] for s in segs]
+    counts = {nm: 0 for nm in names}
+    for inc in SC.get("incidentes_prensa", []):
+        counts[inc["sector"]] = counts.get(inc["sector"], 0) + 1
+    weights = {s["name"]: s["weight"] for s in segs}
+    deaths = {s["name"]: s["base_deaths"] for s in segs}
+
+    df = pd.DataFrame({
+        "sector": names,
+        "peso_atlas": [weights[nm] for nm in names],
+        "muertes_base": [deaths[nm] for nm in names],
+        "atropellos_prensa": [counts[nm] for nm in names],
+    })
+    df["rank_atlas"] = df["peso_atlas"].rank(ascending=False)
+    df["rank_riesgo"] = df["muertes_base"].rank(ascending=False)
+    df["rank_prensa"] = df["atropellos_prensa"].rank(ascending=False, method="average")
+
+    rho_w, p_w = spearmanr(df["peso_atlas"], df["atropellos_prensa"])
+    rho_r, p_r = spearmanr(df["muertes_base"], df["atropellos_prensa"])
+    df.to_csv(OUT / "validacion_pesos.csv", index=False)
+    log.info("Validación: Spearman peso_atlas vs prensa = %.2f (p=%.3f) | "
+             "riesgo_modelo vs prensa = %.2f (p=%.3f) | n=%d incidentes",
+             rho_w, p_w, rho_r, p_r, int(df["atropellos_prensa"].sum()))
+    return df, rho_w, p_w, rho_r, p_r
 
 
 def scenario_deaths(segs, sc_name):
@@ -267,10 +316,13 @@ def main():
     fig.savefig(OUT / "incidentes_por_escenario.png", bbox_inches="tight")
     plt.close(fig)
 
-    # 5) Diagrama radial de riesgo por sector
+    # 5) Validación de pesos contra atropellamientos reales (prensa 2026)
+    vdf, rho_w, p_w, rho_r, p_r = validar_pesos(segs)
+
+    # 6) Diagrama radial de riesgo por sector
     radial_diagram(segs)
 
-    # 6) Serie temporal 2020–2025
+    # 7) Serie temporal 2020–2025
     tdf, avoided = temporal_analysis(segs)
     tdf_show = tdf[["year", "parque_idx", "muertes_observadas", "contrafactual_parque",
                     "muerte_semaforizacion", "muerte_piramide_movilidad", "muerte_vision_cero"]]
@@ -284,7 +336,7 @@ def main():
     ]
     avoid_df = pd.DataFrame(avoid_rows)
 
-    # 7) Reporte Markdown
+    # 8) Reporte Markdown
     lines = [
         "# Seguridad peatonal — Anillo Periférico de Mérida",
         "",
@@ -326,6 +378,26 @@ def main():
         "## Resultados por escenario",
         "",
         df_to_markdown(res_df),
+        "",
+        "## Validación de pesos contra atropellamientos reales (prensa 2026)",
+        "",
+        f"Corpus de {int(vdf['atropellos_prensa'].sum())} reportes localizados por tramo ",
+        "(Diario de Yucatán, Reporteros Hoy, InfoLliteras, Yucatán.com.mx, Sol Yucatán, ",
+        "Novedades). Muestra pequeña y sesgada hacia eventos fatales: validación ",
+        "exploratoria, no censo.",
+        "",
+        df_to_markdown(vdf.sort_values("atropellos_prensa", ascending=False)),
+        "",
+        f"- **Spearman peso del atlas vs prensa**: {rho_w:.2f} (p={p_w:.3f}) — ",
+        "correlación débil-moderada: el volumen captura parte, no toda, la ",
+        "geografía de los incidentes.",
+        f"- **Spearman riesgo del modelo (muertes base) vs prensa**: {rho_r:.2f} ",
+        f"(p={p_r:.3f}).",
+        "- Divergencias visibles: prensa sobrerrepresenta **Norte y Oriente** ",
+        "(volumen alto o cruces conflictivos pese a su infraestructura) y ",
+        "subrepresenta el **suroeste**. Con n=12 los valores no son ",
+        "estadísticamente significativos; un censo oficial de atropellamientos ",
+        "por tramo (SSP/IMEPLAN) cerraría la brecha.",
         "",
         "## Por sector (línea base)",
         "",
