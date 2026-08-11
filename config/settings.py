@@ -183,17 +183,65 @@ SAFETY_CONFIG = {
     "crossing_share": 0.60,          # fracción de muertes en cruces con semáforo
     "volume_exponent": 0.6,          # elasticidad incidentes vs volumen (0.5–1.0 en literatura)
     "speed_fatality_exponent": 3.0,  # severidad ∝ (V/80)^3 (curva WHO/ETSC)
-    # 8 sectores del anillo (~6 km c/u); pond = fracción del aforo total
+    # Infraestructura real del anillo (Gob. de Yucatán / prensa):
+    #   - 26 semáforos vehiculares y 16 peatonales (Saidén Ojeda, Gob. Yucatán)
+    #   - Programa de seguridad: 8 puentes nuevos + 7 rehabilitados = 15;
+    #     18 cruces peatonales seguros; 9 bahías de ascenso/descenso
+    "infra_real": {
+        "semaforos_vehiculares": 26,
+        "semaforos_peatonales": 16,
+        "puentes_peatonales": 15,
+        "cruces_seguros": 18,
+        "bahias_bus": 9,
+    },
+    # 12 sectores del anillo (~4 km c/u; total ~48 km) según el atlas
+    # "Análisis del Anillo Periférico de Mérida" (corredor 500 m, red vial y
+    # movilidad; 27 láminas de hexágonos N→WSW). Los pesos = densidad de celdas
+    # de alta concentración vehicular extraída de la lámina "12 sectores"
+    # (fracción de área roja del mapa de TDPA, escala compartida), normalizada:
+    #   S 0.126 > SW 0.109 > SSW 0.108 > WSW 0.095 > NNE 0.094 > ESE 0.085
+    #   > E 0.071 > ENE 0.069 > N 0.067 > SSE 0.066 > SE 0.064 > NE 0.045
+    # Consistente con congestión reportada (Sur/City Center, Suroeste/Caucel,
+    # Norte/Las Américas; Noreste el más ligero). Semáforos, puentes y cruces
+    # seguros por sector suman los totales de infra_real; E/ESE/SE = tramos
+    # menos urbanos del anillo.
     "segments": [
-        {"name": "N",  "weight": 0.16, "crossings": 6, "bridges": 2, "bus_stops": 5, "urban": True},
-        {"name": "NE", "weight": 0.14, "crossings": 5, "bridges": 1, "bus_stops": 4, "urban": True},
-        {"name": "E",  "weight": 0.13, "crossings": 4, "bridges": 1, "bus_stops": 3, "urban": False},
-        {"name": "SE", "weight": 0.11, "crossings": 3, "bridges": 1, "bus_stops": 2, "urban": False},
-        {"name": "S",  "weight": 0.11, "crossings": 4, "bridges": 1, "bus_stops": 3, "urban": True},
-        {"name": "SW", "weight": 0.11, "crossings": 4, "bridges": 1, "bus_stops": 3, "urban": True},
-        {"name": "W",  "weight": 0.12, "crossings": 5, "bridges": 1, "bus_stops": 4, "urban": True},
-        {"name": "NW", "weight": 0.12, "crossings": 5, "bridges": 1, "bus_stops": 4, "urban": False},
+        {"name": "N",   "weight": 0.068, "length_km": 4, "crossings": 2, "ped_signals": 1,
+         "bridges": 1, "safe_crossings": 1, "bus_stops": 2, "urban": True},
+        {"name": "NNE", "weight": 0.094, "length_km": 4, "crossings": 2, "ped_signals": 2,
+         "bridges": 1, "safe_crossings": 2, "bus_stops": 2, "urban": True},
+        {"name": "NE",  "weight": 0.045, "length_km": 4, "crossings": 1, "ped_signals": 1,
+         "bridges": 1, "safe_crossings": 1, "bus_stops": 1, "urban": True},
+        {"name": "ENE", "weight": 0.069, "length_km": 4, "crossings": 2, "ped_signals": 1,
+         "bridges": 1, "safe_crossings": 1, "bus_stops": 2, "urban": True},
+        {"name": "E",   "weight": 0.071, "length_km": 4, "crossings": 2, "ped_signals": 1,
+         "bridges": 1, "safe_crossings": 1, "bus_stops": 2, "urban": False},
+        {"name": "ESE", "weight": 0.085, "length_km": 4, "crossings": 2, "ped_signals": 1,
+         "bridges": 1, "safe_crossings": 2, "bus_stops": 2, "urban": False},
+        {"name": "SE",  "weight": 0.064, "length_km": 4, "crossings": 2, "ped_signals": 1,
+         "bridges": 1, "safe_crossings": 1, "bus_stops": 2, "urban": False},
+        {"name": "SSE", "weight": 0.066, "length_km": 4, "crossings": 2, "ped_signals": 1,
+         "bridges": 1, "safe_crossings": 1, "bus_stops": 2, "urban": True},
+        {"name": "S",   "weight": 0.126, "length_km": 4, "crossings": 3, "ped_signals": 2,
+         "bridges": 2, "safe_crossings": 2, "bus_stops": 3, "urban": True},
+        {"name": "SSW", "weight": 0.108, "length_km": 4, "crossings": 3, "ped_signals": 2,
+         "bridges": 1, "safe_crossings": 2, "bus_stops": 3, "urban": True},
+        {"name": "SW",  "weight": 0.109, "length_km": 4, "crossings": 3, "ped_signals": 2,
+         "bridges": 2, "safe_crossings": 2, "bus_stops": 3, "urban": True},
+        {"name": "WSW", "weight": 0.095, "length_km": 4, "crossings": 2, "ped_signals": 1,
+         "bridges": 2, "safe_crossings": 2, "bus_stops": 2, "urban": True},
     ],
+    # ── Serie temporal 2020–2025 ──
+    # Muertes reportadas por año en el Periférico (prensa local):
+    #   2022 = 19 fallecimientos (Canal Doce / Reporteros Hoy)
+    #   2024 ≈ 14 (Por Esto: "3 meses de 2025 iguala todo 2024")
+    #   2025 = 17 (Diario de Yucatán); 2026 = 18 a julio (Yucatán.com.mx)
+    # 2020/2021/2023 se interpolaron dentro de la banda histórica 18–21
+    # (20–25 anuales según conteos históricos).
+    "deaths_observed": {2020: 20, 2021: 21, 2022: 19, 2023: 18, 2024: 14, 2025: 17},
+    # Crecimiento del parque vehicular de Yucatán (INEGI): +77% en una década
+    # (~5.9%/año); >1.1M unidades en 2024–25 (crecimiento anual >6%).
+    "fleet_growth_annual": 0.059,
     # Levers por escenario (factores multiplicativos sobre la tasa de muertes):
     #   vol  = cambio de volumen vehicular (1.0 = sin cambio)
     #   speed= límite efectivo en tramos urbanos (km/h)

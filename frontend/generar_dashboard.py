@@ -67,6 +67,37 @@ def main():
             'alt="Curva densidad vs incidentes"></div>'
             '</div>'
         )
+        if (SAFE / "evolucion_temporal.csv").exists():
+            tdf = pd.read_csv(SAFE / "evolucion_temporal.csv")
+            tot, cf = int(tdf["muertes_observadas"].sum()), int(round(tdf["contrafactual_parque"].sum()))
+            vc = int(round(tot - tdf["muerte_vision_cero"].sum()))
+            trows = "".join(
+                f'<tr><td>{int(r["year"])}</td><td>{r["parque_idx"]:.2f}</td>'
+                f'<td>{int(r["muertes_observadas"])}</td><td>{r["contrafactual_parque"]:.1f}</td>'
+                f'<td>{r["muerte_vision_cero"]:.1f}</td></tr>'
+                for _, r in tdf.iterrows()
+            )
+        if (SAFE / "anillo_sectores.png").exists():
+            safety += (
+                '<div class="temporal" style="text-align:center"><h2>Riesgo por sector del anillo</h2>'
+                '<div class="sub">12 sectores (N→WSW) según el atlas del Periférico; '
+                'altura y color = muertes/año por sector (2025).</div>'
+                f'<img src="{b64(SAFE / "anillo_sectores.png")}" alt="Riesgo por sector" '
+                'style="max-width:560px;margin:0 auto;display:block">'
+                '</div>'
+            )
+        if (SAFE / "evolucion_temporal.csv").exists():
+            safety += (
+                '<div class="temporal"><h2>Evolución temporal 2020–2025</h2>'
+                '<div class="sub">Muertes vs parque vehicular (+77% en una década, INEGI). '
+                f'<b>{tot} muertes observadas</b> vs <b>{cf} contrafactuales</b> (solo parque: '
+                f'{cf - tot} ya evitadas) · <b>Visión Cero habría evitado {vc}</b> en el periodo.</div>'
+                '<table><thead><tr><th>Año</th><th>Parque (índice)</th><th>Observadas</th>'
+                '<th>Contrafactual</th><th>Con Visión Cero</th></tr></thead>'
+                f'<tbody>{trows}</tbody></table>'
+                f'<img src="{b64(SAFE / "evolucion_temporal.png")}" alt="Evolución temporal">'
+                '</div>'
+            )
 
     thead = "<tr><th>Escenario</th>" + "".join(f"<th>{y}</th>" for y in years) + "<th>Δ base → 2030</th></tr>"
     trows = []
@@ -149,6 +180,10 @@ def main():
   .safety-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;align-items:start}
   .safety-grid h2{grid-column:1/-1;margin-top:0}
   .safety-img img{width:100%;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+  .temporal{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:16px}
+  .temporal h2{margin-top:0}
+  .temporal table{width:auto;min-width:420px}
+  .temporal img{width:100%;border:1px solid var(--border);border-radius:8px;margin-top:12px}
   @media (max-width:900px){.safety-grid{grid-template-columns:1fr}}
   table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:13px}
   th,td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--border)}

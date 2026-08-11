@@ -186,15 +186,30 @@ Periférico de Mérida (~150,000 veh/día; 20–25 muertes/año, **17 en 2025**;
 |-----------|-------------|-----------|-----------|
 | Situación actual (2025) | 17.0 | — | línea base calibrada |
 | Semaforización coordinada | 12.4 | −27% | fases peatonales + LPI en cruces |
-| Pirámide de movilidad | 9.8 | −42% | 80→60 km/h en tramos urbanos + cruces prioritarios |
+| Pirámide de movilidad | 9.5 | −44% | 80→60 km/h en tramos urbanos + cruces prioritarios |
 | Paradas de autobús accesibles | 12.6 | −26% | traslado modal (−15% volumen) + cruces seguros en paradas |
-| Visión Cero (todo combinado) | 6.9 | **−60%** | volumen + velocidad + infraestructura se potencian |
+| Visión Cero (todo combinado) | 6.7 | **−61%** | volumen + velocidad + infraestructura se potencian |
+
+**Estructura de 12 sectores (N→WSW)** según el atlas *Análisis del Anillo
+Periférico de Mérida* (lámina "12 sectores"): los pesos de demanda se extrajeron
+de la densidad de celdas de alta concentración vehicular del mapa TDPA
+(S 0.126 > SW 0.109 > SSW 0.108 > WSW 0.095 > NNE 0.094 > … > NE 0.045),
+consistente con la congestión reportada. Aforo total ~150k veh/día repartido
+por esos pesos y cruces documentados del anillo: **26 semáforos vehiculares,
+16 peatonales** (Saidén Ojeda, Gob. Yucatán), **15 puentes** (8 nuevos + 7
+rehabilitados), **18 cruces seguros** y **9 bahías** (programa de seguridad vial).
 
 Modelo: `muertes = base × (V_esc/V_base)^0.6 × severidad(v) × [0.6·cross·stops + 0.4]`,
 con severidad por velocidad según la curva de fatalidad peatonal WHO (2008:
 30 km/h→10% … 80 km/h→95%). Calibrado contra cifras publicadas (Gob. de
 Yucatán, Diario de Yucatán, Azteca Yucatán; ver `config/settings.py` →
 `SAFETY_CONFIG` y `results/safety/seguridad_peatonal.md`).
+
+**Dimensión temporal 2020–2025**: con el parque vehicular creciendo +77% en una
+década (~5.9%/año, INEGI), el contrafactual "solo parque" daría 131 muertes
+acumuladas vs 109 observadas (22 ya evitadas por medidas actuales); de haber
+estado vigente Visión Cero todo el periodo habría evitado **~65 vidas**
+(`results/safety/evolucion_temporal.csv` y `evolucion_temporal.png`).
 
 ---
 

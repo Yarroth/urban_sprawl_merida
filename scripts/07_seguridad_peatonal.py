@@ -51,6 +51,16 @@ OUT = Path(PATHS["results_reports"]).parent / "safety"
 WHO_SPEED_DEATH = [(30, 0.10), (40, 0.30), (50, 0.55), (60, 0.75), (70, 0.90), (80, 0.95), (90, 0.98)]
 
 
+def _fmt(v):
+    """Formatea celdas: enteros sin decimal; floats enteros como int; resto con 1 decimal."""
+    if isinstance(v, (int, np.integer)):
+        return str(int(v))
+    if isinstance(v, (float, np.floating)):
+        f = float(v)
+        return str(int(f)) if f.is_integer() else f"{f:.1f}"
+    return str(v)
+
+
 def df_to_markdown(df):
     """Tabla markdown sin dependencia de tabulate."""
     cols = list(df.columns)
@@ -58,7 +68,7 @@ def df_to_markdown(df):
     sep = "|" + "---|" * len(cols)
     body = []
     for _, r in df.iterrows():
-        body.append("| " + " | ".join(str(r[c]) for c in cols) + " |")
+        body.append("| " + " | ".join(_fmt(r[c]) for c in cols) + " |")
     return "\n".join([head, sep] + body)
 
 
@@ -71,16 +81,104 @@ def fatality_severity(speed_kmh):
 
 
 def build_segments():
-    """Segmentos del anillo con muertes base distribuidas por exposición."""
+    """Cuadrantes del anillo con muertes base distribuidas por exposición.
+
+    La exposición usa la infraestructura real (IMEPLAN/Gob. de Yucatán): los
+    cruces y semáforos peatonales generan puntos de conflicto (↑ exposición);
+    los pasos elevados y cruces seguros los mitigan (↓ exposición).
+    """
     segs = []
     for s in SC["segments"]:
-        exposure = (1 + 0.25 * s["crossings"]) * (1.25 if s["urban"] else 1.0)
-        segs.append({**s, "exposure": exposure})
+        exposure = ((1 + 0.08 * s["crossings"] + 0.05 * s["ped_signals"])
+                    * (1 - 0.03 * s["bridges"] - 0.04 * s["safe_crossings"])
+                    * (1.2 if s["urban"] else 1.0))
+        segs.append({**s, "exposure": max(exposure, 0.1)})
     tot_exp = sum(s["exposure"] * s["weight"] for s in segs)
     for s in segs:
         s["base_deaths"] = SC["baseline_deaths_year"] * (s["weight"] * s["exposure"] / tot_exp)
         s["aadt"] = SC["aadt_total"] * s["weight"]
     return segs
+
+
+def temporal_analysis(segs):
+    """Serie 2020–2025: muertes observadas vs contrafactual del parque vehicular
+    y cuántas vidas habría evitado cada escenario de haber estado vigente."""
+    years = sorted(SC["deaths_observed"])
+    fleet = {y: (1 + SC["fleet_growth_annual"]) ** (y - years[0]) for y in years}
+    obs0 = SC["deaths_observed"][years[0]]
+    cf = {y: obs0 * fleet[y] ** SC["volume_exponent"] for y in years}
+
+    # Reducción transversal de cada escenario (reutiliza el modelo por segmento)
+    base_deaths = sum(scenario_deaths(segs, "base"))
+    red = {name: 1 - sum(scenario_deaths(segs, name)) / base_deaths for name in SC["scenarios"]}
+
+    rows = []
+    for y in years:
+        row = {"year": y, "parque_idx": round(fleet[y], 3),
+               "muertes_observadas": SC["deaths_observed"][y],
+               "contrafactual_parque": round(cf[y], 1)}
+        for name in SC["scenarios"]:
+            row[f"muerte_{name}"] = round(SC["deaths_observed"][y] * (1 - red[name]), 1)
+        rows.append(row)
+    df = pd.DataFrame(rows)
+    df.to_csv(OUT / "evolucion_temporal.csv", index=False)
+
+    tot_obs = sum(SC["deaths_observed"].values())
+    avoided = {name: round(tot_obs * red[name], 1) for name in SC["scenarios"]}
+
+    fig, ax = plt.subplots(figsize=(9, 5), dpi=VIZ_CONFIG["dpi"])
+    ax.plot(years, [cf[y] for y in years], "--", color="#90A4AE", lw=2,
+            label="Contrafactual: solo crecimiento del parque vehicular")
+    ax.plot(years, [SC["deaths_observed"][y] for y in years], "o-", color="#E53935", lw=2,
+            label="Observado (prensa local)")
+    for name, color in [("piramide_movilidad", "#43A047"), ("vision_cero", "#7C4DFF")]:
+        ax.plot(years, [r[f"muerte_{name}"] for r in rows], "-", color=color, lw=1.6,
+                label=f"Con {name.replace('_', ' ')} aplicado")
+    ax.set_xlabel("Año")
+    ax.set_ylabel("Muertes / año (Periférico)")
+    ax.set_title("Evolución 2020–2025: muertes vs parque vehicular (+77% en una década)")
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(OUT / "evolucion_temporal.png", bbox_inches="tight")
+    plt.close(fig)
+    log.info("Serie temporal: Σ observado %d muertes 2020–2025; contrafactual %.0f "
+             "(%.0f evitadas); visión cero habría evitado %.0f",
+             tot_obs, sum(cf.values()), sum(cf.values()) - tot_obs, avoided["vision_cero"])
+    return df, avoided
+
+
+def radial_diagram(segs):
+    """Rosa de riesgo: 12 sectores del anillo en 360°, altura = muertes/año
+    (2025) y color = nivel de riesgo relativo."""
+    names = [s["name"] for s in segs]
+    deaths = np.array([s["base_deaths"] for s in segs])
+    n = len(segs)
+    theta = np.deg2rad(np.arange(n) * 360.0 / n + 360.0 / n / 2)
+    width = np.deg2rad(360.0 / n) * 0.9
+
+    fig = plt.figure(figsize=(8.2, 8.2), dpi=VIZ_CONFIG["dpi"])
+    ax = fig.add_subplot(111, projection="polar")
+    norm = plt.Normalize(deaths.min(), deaths.max())
+    cmap = plt.get_cmap("YlOrRd")
+    ax.bar(theta, deaths, width=width, color=cmap(norm(deaths)),
+           edgecolor="white", linewidth=0.6, alpha=0.95)
+    for t, nm, d in zip(theta, names, deaths):
+        ax.text(t, deaths.max() * 1.18, nm, ha="center", va="center", fontsize=9, fontweight="bold")
+        ax.text(t, d + deaths.max() * 0.07, f"{d:.1f}", ha="center", va="bottom", fontsize=8, color="#333")
+    ax.set_theta_zero_location("N")
+    ax.set_theta_direction(-1)   # sentido horario (N → NNE → … → WSW)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.spines["polar"].set_visible(False)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    cbar = plt.colorbar(sm, ax=ax, pad=0.10, shrink=0.75)
+    cbar.set_label("Muertes/año por sector (2025)")
+    ax.set_title("Riesgo peatonal por sector — Anillo Periférico de Mérida", pad=30, fontsize=13)
+    fig.tight_layout()
+    fig.savefig(OUT / "anillo_sectores.png", bbox_inches="tight")
+    plt.close(fig)
+    log.info("Radial: %s (más riesgo) → %s (menos riesgo)", names[int(np.argmax(deaths))], names[int(np.argmin(deaths))])
 
 
 def scenario_deaths(segs, sc_name):
@@ -104,8 +202,9 @@ def main():
     rows = []
     for s in segs:
         rows.append({
-            "sector": s["name"], "aadt_veh_dia": s["aadt"],
-            "cruces": s["crossings"], "pasos_elevados": s["bridges"],
+            "sector": s["name"], "aadt_veh_dia": round(s["aadt"]),
+            "cruces_semaforo": s["crossings"], "semaforos_peatonales": s["ped_signals"],
+            "pasos_elevados": s["bridges"], "cruces_seguros": s["safe_crossings"],
             "paradas_bus": s["bus_stops"], "tramo_urbano": s["urban"],
             "muertes_base": round(s["base_deaths"], 3),
             "muertes_peatones_base": round(s["base_deaths"] * SC["pedestrian_share"], 3),
@@ -168,7 +267,24 @@ def main():
     fig.savefig(OUT / "incidentes_por_escenario.png", bbox_inches="tight")
     plt.close(fig)
 
-    # 5) Reporte Markdown
+    # 5) Diagrama radial de riesgo por sector
+    radial_diagram(segs)
+
+    # 6) Serie temporal 2020–2025
+    tdf, avoided = temporal_analysis(segs)
+    tdf_show = tdf[["year", "parque_idx", "muertes_observadas", "contrafactual_parque",
+                    "muerte_semaforizacion", "muerte_piramide_movilidad", "muerte_vision_cero"]]
+    tdf_show.columns = ["Año", "Parque (índice)", "Observadas", "Contrafactual",
+                        "Semaforización", "Pirámide mov.", "Visión Cero"]
+    avoid_rows = [
+        {"escenario": name.replace("_", " ").title(),
+         "vidas_evitadas_2020_2025": avoided[name],
+         "pct": round(avoided[name] / (sum(SC["deaths_observed"].values())) * 100, 1)}
+        for name in SC["scenarios"]
+    ]
+    avoid_df = pd.DataFrame(avoid_rows)
+
+    # 7) Reporte Markdown
     lines = [
         "# Seguridad peatonal — Anillo Periférico de Mérida",
         "",
@@ -180,6 +296,22 @@ def main():
         "- **SF**: severidad por velocidad según curva de fatalidad peatonal WHO (2008)",
         "  (30 km/h→10%, 50→55%, 60→75%, 80→95%)",
         "- **cross/stops**: levers por escenario en cruces semaforizados y paradas",
+        "",
+        "## Infraestructura real del anillo (IMEPLAN / Gob. de Yucatán)",
+        "",
+        "| Elemento | Total | Fuente |",
+        "|---|---|---|",
+        f"| Semáforos vehiculares | {SC['infra_real']['semaforos_vehiculares']} | Saidén Ojeda (Gob. Yucatán) |",
+        f"| Semáforos peatonales | {SC['infra_real']['semaforos_peatonales']} | Saidén Ojeda (Gob. Yucatán) |",
+        f"| Puentes peatonales | {SC['infra_real']['puentes_peatonales']} (8 nuevos + 7 rehabilitados) | Programa de seguridad vial |",
+        f"| Cruces peatonales seguros | {SC['infra_real']['cruces_seguros']} | Programa de seguridad vial |",
+        f"| Bahías de ascenso/descenso | {SC['infra_real']['bahias_bus']} | Programa de seguridad vial |",
+        "",
+        "Los 12 sectores y sus pesos de demanda provienen del atlas \"Análisis ",
+        "del Anillo Periférico de Mérida\" (lámina 12 sectores): densidad de ",
+        "celdas de alta concentración vehicular (mapa TDPA, escala compartida), ",
+        "normalizada. El TDPA puntual por tramo requeriría los datos fuente del ",
+        "atlas o aforos oficiales del IMT/SCT.",
         "",
         "## Calibración (fuentes reales)",
         "",
@@ -195,9 +327,27 @@ def main():
         "",
         df_to_markdown(res_df),
         "",
-        "## Por segmento (línea base)",
+        "## Por sector (línea base)",
         "",
         df_to_markdown(seg_df),
+        "",
+        "![Riesgo por sector](anillo_sectores.png)",
+        "",
+        "## Evolución temporal 2020–2025",
+        "",
+        "Muertes observadas vs contrafactual del crecimiento del parque vehicular",
+        f"(+{SC['fleet_growth_annual']*100:.1f}%/año, INEGI: +77% en una década). ",
+        "La brecha observado↔contrafactual mide las vidas que ya se están evitando ",
+        "con las medidas actuales.",
+        "",
+        df_to_markdown(tdf_show),
+        "",
+        "![Evolución temporal](evolucion_temporal.png)",
+        "",
+        "### Vidas evitables por escenario (acumulado 2020–2025, si el paquete ",
+        "hubiera estado vigente todo el periodo)",
+        "",
+        df_to_markdown(avoid_df),
         "",
         "## Lectura",
         "",
