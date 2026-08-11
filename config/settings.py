@@ -102,11 +102,11 @@ CA_CONFIG = {
     "annual_growth_rate":   0.035,
     "neighborhood_radius":  5,
 
-    # CA de reglas aprendidas: features del estado de vecindad
-    "ca_rule_features": [
-        "nbr_density_3x3", "nbr_density_5x5", "nbr_density_9x9",
-        "p_lgbm", "dist_edge", "lst_local", "karst_local"
-    ],
+    # CA de reglas aprendidas: columnas reales del dataset X_ca, en orden.
+    # X_ca = features disponibles (FEATURE_NAMES ∩ dataset) + P_LightGBM
+    # out-of-fold al final (ver build_ca_training_data en 03_train_model.py).
+    # Se deriva de FEATURE_NAMES para evitar que la lista se desincronice.
+    "ca_rule_features": FEATURE_NAMES + ["p_lgbm"],
 
     # Escenarios predefinidos
     "scenarios": {

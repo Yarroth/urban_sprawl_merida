@@ -29,8 +29,9 @@ log = logging.getLogger(__name__)
 try:
     import lightgbm as lgb
     LGB_AVAILABLE = True
-except ImportError:
-    log.warning("LightGBM no instalado. Usando RandomForest como fallback.")
+except (ImportError, OSError) as e:
+    # OSError cubre casos donde la librería C no carga (p. ej. falta libomp)
+    log.warning(f"LightGBM no disponible ({e}). Usando RandomForest como fallback.")
     from sklearn.ensemble import RandomForestClassifier
     LGB_AVAILABLE = False
 
