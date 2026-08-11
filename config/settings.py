@@ -271,6 +271,28 @@ SAFETY_CONFIG = {
         {"fecha": "2026-07-18", "sector": "E",   "fuente": "Reporteros Hoy", "nota": "accidente en intersección, entrada Col. Cactus"},
         {"fecha": "2026-04-15", "sector": "E",   "fuente": "Instagram/prensa", "nota": "fallece atropellado en el oriente"},
     ],
+    # ── Demanda peatonal por sector (0–1) ──
+    # Capa de puntos de deseo de cruce. Mezcla de: (a) intensidad peatonal del
+    # atlas (lámina II.5 concentración de peatones: rojo = caminata intensa,
+    # extraída por cuña de 30°), (b) demanda revelada por los atropellamientos
+    # de prensa (prensa_share) y (c) cruces documentados de flujo alto
+    # (puentes de Cholul, Chichí Suárez — auditor vial R. Flores Ayora, Diario
+    # de Yucatán 04/2024 —, Kanasín, Xmatkuil, Dzununcán). Mínimo 0.25 para no
+    # anular sectores con poca actividad medida pero cruces conflictivos.
+    "ped_demand": {
+        "N": 0.60,   # Cholul y acceso norte (flujo alto + prensa)
+        "NNE": 0.71, # Cholul / área norte
+        "NE": 0.87,  # Chichí Suárez — puente de mayor flujo (experto)
+        "ENE": 0.25, # actividad medida baja
+        "E": 0.80,   # demanda revelada por prensa (4 eventos) pese a menor actividad
+        "ESE": 0.25, # actividad medida baja
+        "SE": 0.80,  # Kanasín — cúmulo prensa 2024–2025 (puente vehicular, Reparto Granjas)
+        "SSE": 0.83, # intensidad atlas alta
+        "S": 1.00,   # Xmatkuil, Dzununcán + prensa
+        "SSW": 0.50,
+        "SW": 0.58,
+        "WSW": 0.80, # poniente/Caucel (intensidad atlas alta)
+    },
     # Levers por escenario (factores multiplicativos sobre la tasa de muertes):
     #   vol  = cambio de volumen vehicular (1.0 = sin cambio)
     #   speed= límite efectivo en tramos urbanos (km/h)

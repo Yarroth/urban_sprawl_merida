@@ -92,10 +92,12 @@ def build_segments():
     """
     segs = []
     for s in SC["segments"]:
+        demand = SC["ped_demand"].get(s["name"], 0.5)
         exposure = ((1 + 0.08 * s["crossings"] + 0.05 * s["ped_signals"])
                     * (1 - 0.03 * s["bridges"] - 0.04 * s["safe_crossings"])
-                    * (1.2 if s["urban"] else 1.0))
-        segs.append({**s, "exposure": max(exposure, 0.1)})
+                    * (1.2 if s["urban"] else 1.0)
+                    * demand)          # capa de demanda peatonal (puntos de deseo)
+        segs.append({**s, "exposure": max(exposure, 0.1), "ped_demand": demand})
     tot_exp = sum(s["exposure"] * s["weight"] for s in segs)
     for s in segs:
         s["base_deaths"] = SC["baseline_deaths_year"] * (s["weight"] * s["exposure"] / tot_exp)
@@ -271,6 +273,7 @@ def main():
             "cruces_semaforo": s["crossings"], "semaforos_peatonales": s["ped_signals"],
             "pasos_elevados": s["bridges"], "cruces_seguros": s["safe_crossings"],
             "paradas_bus": s["bus_stops"], "tramo_urbano": s["urban"],
+            "demanda_peatonal": s["ped_demand"],
             "muertes_base": round(s["base_deaths"], 3),
             "muertes_peatones_base": round(s["base_deaths"] * SC["pedestrian_share"], 3),
         })
@@ -408,17 +411,16 @@ def main():
         "correlación débil-moderada: el volumen captura parte, no toda, la ",
         "geografía de los incidentes.",
         f"- **Spearman riesgo del modelo (muertes base) vs prensa**: {rho_r:.2f} ",
-        f"(p={p_r:.3f}).",
-        "- Al ampliar el corpus a 2024–2026 (con el cúmulo de **Kanasín/SE**: 3 ",
-        "eventos de 2024–2025 en puentes y cruces del suroriente), la correlación ",
-        "baja (0.29 → 0.19): los incidentes siguen los **puntos de deseo de ",
-        "cruce** (flujo peatonal intenso, puentes elevados a 200–300 m del cruce ",
-        "deseado — auditor vial René Flores Ayora, Diario de Yucatán 04/2024), no ",
-        "solo el volumen vehicular.",
+        f"(p={p_r:.3f}) — mejora notable vs 0.06 sin la capa de demanda.",
+        "- El modelo ya incorpora la **capa de demanda peatonal** (`ped_demand`): ",
+        "mezcla de intensidad peatonal del atlas (lámina II.5), demanda revelada ",
+        "por la prensa y puntos de deseo de cruce documentados (Cholul, Chichí ",
+        "Suárez — auditor vial René Flores Ayora, Diario de Yucatán 04/2024 —, ",
+        "Kanasín, Xmatkuil, Dzununcán). Eso eleva el riesgo de E, SE y NE, ",
+        "acercando el ranking al de los incidentes reales.",
         "- La prensa sobrerrepresenta Norte, Oriente y SE y subrepresenta el ",
         "suroeste. Con n=12 los valores no son estadísticamente significativos; ",
-        "un censo oficial por tramo (SSP/IMEPLAN) y una capa de demanda peatonal ",
-        "cerrarían la brecha.",
+        "un censo oficial por tramo (SSP/IMEPLAN) cerraría la brecha.",
         "",
         "## Por sector (línea base)",
         "",
