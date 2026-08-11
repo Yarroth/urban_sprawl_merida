@@ -22,7 +22,10 @@ con visualización interactiva.
 │   ├── 06_calibrar_tasas.py # Calibración empírica de tasas (ZMM 1998–2020)
 │   └── 07_seguridad_peatonal.py  # Incidentes peatonales vs densidad (Periférico)
 ├── frontend/
-│   └── *.html               # Dashboards interactivos (probabilidad, comparación 3D)
+│   ├── generar_dashboard.py # Genera el dashboard HTML (mapas + métricas + seguridad)
+│   ├── dashboard_resultados.html  # Dashboard interactivo completo
+│   └── dashboard_resultados.pdf   # Versión imprimible A4 (entrega final)
+├── docs/                    # Entregables: propuestas, estudios, speech, matemáticas
 ├── docs/                    # Entregables: propuestas, estudios, speech, matemáticas
 │   └── archivo/             # Zips históricos (snapshots ya absorbidos por git)
 ├── demo_merida.py           # Demo completa con datos sintéticos (sin GEE/rasterio)
@@ -223,6 +226,16 @@ significativos y la prensa sobrerrepresenta Norte, Oriente y SE — un censo
 oficial por tramo (SSP/IMEPLAN) cerraría la brecha
 (`results/safety/validacion_pesos.csv` y sección en `seguridad_peatonal.md`).
 
+**Visión Cero priorizada por puntos de deseo de cruce** (`vision_cero_priorizada.csv`
+y `vision_cero_priorizada.png`): al escalar los levers con la demanda peatonal
+por sector (efectividad = 0.35 + 0.65 × demanda normalizada), la versión
+priorizada logra **−54%** de muertes con **−22% de presupuesto** frente a la
+uniforme (−61%), es decir **+14% de eficiencia** (vidas por unidad invertida):
+concentra el recorte donde ocurren los atropellamientos (S, NE/Chichí Suárez,
+SSE, E, SE/Kanasín, WSW mantienen casi todo el efecto) y relaja los tramos de
+baja demanda medida (ENE, ESE). La uniforme sigue siendo el techo en vidas
+totales, pero cuesta ~22% más por solo 6.5 pp adicionales.
+
 ---
 
 ## Hallazgos principales (proyección 2030)
@@ -234,6 +247,26 @@ oficial por tramo (SSP/IMEPLAN) cerraría la brecha
 | Cobertura verde | 5% | 23% | 29% |
 | LST promedio | +3.6°C | +0.4°C | -1.1°C |
 | Vuln. acuífero | 0.68 | 0.36 | 0.24 |
+
+---
+
+## Dashboard y entrega final
+
+`frontend/dashboard_resultados.html` consolida todo el análisis (mapas de
+probabilidad por escenario y año, comparaciones 2024→2030, calidad espacial,
+seguridad peatonal del Periférico). Para la versión imprimible:
+
+```bash
+python frontend/generar_dashboard.py   # regenera el HTML
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless=new --disable-gpu --no-pdf-header-footer \
+  --print-to-pdf=frontend/dashboard_resultados.pdf \
+  file://$(pwd)/frontend/dashboard_resultados.html
+```
+
+El PDF resultante (A4 apaisado, 13 páginas) incluye portada con resumen
+ejecutivo y los estilos de impresión definidos en `@media print` del generador:
+tema claro, una página por sección y los 15 mapas en cuadrículas de 5.
 
 ---
 

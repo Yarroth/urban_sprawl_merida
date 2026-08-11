@@ -261,6 +261,96 @@ def scenario_deaths(segs, sc_name):
     return out
 
 
+def scenario_deaths_prioritized(segs, sc_name):
+    """Muertes por segmento con los levers aplicados con intensidad proporcional a
+    la demanda peatonal del sector (puntos de deseo de cruce).
+
+    efectividad = 0.35 + 0.65 × (demanda / demanda_máx)   → [0.35, 1.0]
+
+    Los sectores con puntos de deseo de cruce documentados (S, NE, SSE, E, SE,
+    WSW) reciben el paquete casi completo; los de baja demanda medida (ENE, ESE),
+    solo una fracción. El volumen se mantiene global (el traslado modal no
+depende del sector)."""
+    lv = SC["scenarios"][sc_name]
+    dmax = max(SC["ped_demand"].values())
+    out = []
+    for s in segs:
+        eff = 0.35 + 0.65 * (s["ped_demand"] / dmax)
+        vol_factor = lv["vol"] ** SC["volume_exponent"]
+        if s["urban"]:
+            speed_eff = SC["speed_limit_kmh"] - (SC["speed_limit_kmh"] - lv["speed"]) * eff
+        else:
+            speed_eff = SC["speed_limit_kmh"]
+        severity = fatality_severity(speed_eff) / fatality_severity(SC["speed_limit_kmh"])
+        cross_eff = 1 - (1 - lv["cross"]) * eff
+        stops_eff = 1 - (1 - lv["stops"]) * eff
+        crossing = SC["crossing_share"] * cross_eff * stops_eff + (1 - SC["crossing_share"])
+        out.append(s["base_deaths"] * vol_factor * severity * crossing)
+    return out
+
+
+def comparar_vision_cero_priorizada(segs):
+    """Compara Visión Cero uniforme vs priorizada por puntos de deseo de cruce:
+    cómo cambia la reducción por sector al escalar los levers con la demanda
+    peatonal. Salidas: CSV por sector, gráfica de barras y totales."""
+    base = np.array([s["base_deaths"] for s in segs])
+    uni = np.array(scenario_deaths(segs, "vision_cero"))
+    pri = np.array(scenario_deaths_prioritized(segs, "vision_cero"))
+    red_uni = 100 * (1 - uni / base)
+    red_pri = 100 * (1 - pri / base)
+
+    df = pd.DataFrame({
+        "sector": [s["name"] for s in segs],
+        "Demanda peatonal": [s["ped_demand"] for s in segs],
+        "Muertes base": np.round(base, 3),
+        "Muertes VZ uniforme": np.round(uni, 3),
+        "Muertes VZ priorizada": np.round(pri, 3),
+        "Reducción uniforme %": np.round(red_uni, 1),
+        "Reducción priorizada %": np.round(red_pri, 1),
+        "Ganancia (pp)": np.round(red_pri - red_uni, 1),
+    }).sort_values("Demanda peatonal", ascending=False)
+    df.to_csv(OUT / "vision_cero_priorizada.csv", index=False)
+
+    # Eficiencia: unidades de inversión (1.0 por sector con paquete completo).
+    # La priorizada invierte intensidad ∝ demanda: Σ(0.35 + 0.65·demanda_norm).
+    dmax = max(SC["ped_demand"].values())
+    units_uni = float(len(segs))
+    units_pri = float(sum(0.35 + 0.65 * (s["ped_demand"] / dmax) for s in segs))
+    saved_uni, saved_pri = base.sum() - uni.sum(), base.sum() - pri.sum()
+    eff_gain = (saved_pri / units_pri) / (saved_uni / units_uni) - 1
+
+    # Barras horizontales por sector (mayor demanda arriba)
+    dfc = df.sort_values("Demanda peatonal", ascending=True)
+    y = np.arange(len(dfc))
+    h = 0.26
+    fig, ax = plt.subplots(figsize=(9, 6.5), dpi=VIZ_CONFIG["dpi"])
+    ax.barh(y - h, dfc["Muertes base"], height=h, color="#90A4AE",
+            label="Línea base 2025")
+    ax.barh(y, dfc["Muertes VZ uniforme"], height=h, color="#B39DDB",
+            label="Visión Cero uniforme")
+    ax.barh(y + h, dfc["Muertes VZ priorizada"], height=h, color="#7C4DFF",
+            label="Visión Cero priorizada por demanda")
+    for i, (p, pv) in enumerate(zip(dfc["Reducción priorizada %"],
+                                    dfc["Muertes VZ priorizada"])):
+        ax.text(pv + 0.04, i + h, f"-{p:.0f}%", va="center", fontsize=8,
+                color="#4A148C", fontweight="bold")
+    ax.set_yticks(y, dfc.sector)
+    ax.set_xlabel("Muertes / año por sector")
+    ax.set_title("Visión Cero: uniforme vs priorizada por puntos de deseo de cruce")
+    ax.grid(axis="x", alpha=0.3)
+    ax.legend(fontsize=8, loc="lower right")
+    fig.tight_layout()
+    fig.savefig(OUT / "vision_cero_priorizada.png", bbox_inches="tight")
+    plt.close(fig)
+
+    tot_base, tot_uni, tot_pri = base.sum(), uni.sum(), pri.sum()
+    log.info("Visión Cero priorizada: total %.1f (-%.1f%%) vs uniforme %.1f (-%.1f%%) con "
+             "%.2f unidades vs %.0f; eficiencia +%.1f%% (vidas por unidad invertida)",
+             tot_pri, 100 * (1 - tot_pri / tot_base), tot_uni,
+             100 * (1 - tot_uni / tot_base), units_pri, units_uni, 100 * eff_gain)
+    return df, tot_base, tot_uni, tot_pri, units_uni, units_pri, eff_gain
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     segs = build_segments()
@@ -340,6 +430,10 @@ def main():
 
     # 6) Diagrama radial de riesgo por sector
     radial_diagram(segs)
+
+    # 6b) Visión Cero priorizada por puntos de deseo de cruce
+    (vzdf, vz_tot_base, vz_tot_uni, vz_tot_pri,
+     vz_units_uni, vz_units_pri, vz_eff_gain) = comparar_vision_cero_priorizada(segs)
 
     # 7) Serie temporal 2020–2025
     tdf, avoided = temporal_analysis(segs)
@@ -421,6 +515,32 @@ def main():
         "- La prensa sobrerrepresenta Norte, Oriente y SE y subrepresenta el ",
         "suroeste. Con n=12 los valores no son estadísticamente significativos; ",
         "un censo oficial por tramo (SSP/IMEPLAN) cerraría la brecha.",
+        "",
+        "## Visión Cero priorizada por puntos de deseo de cruce",
+        "",
+        "En lugar de aplicar el paquete uniformemente, la intensidad de cada lever ",
+        "(velocidad, cruces, paradas) se escala con la demanda peatonal del sector: ",
+        "efectividad = 0.35 + 0.65 × (demanda / demanda_máx). Los sectores con ",
+        "puntos de deseo de cruce documentados (S, NE/Chichí Suárez, SSE, E, ",
+        "SE/Kanasín, WSW) reciben el paquete casi completo; los de baja demanda ",
+        "medida (ENE, ESE), solo una fracción. El volumen se mantiene global ",
+        "(el traslado modal no depende del sector).",
+        "",
+        df_to_markdown(vzdf),
+        "",
+        f"- **Total uniforme**: {vz_tot_uni:.1f} muertes/año (−{100*(1-vz_tot_uni/vz_tot_base):.1f}%)",
+        f"- **Total priorizada por demanda**: {vz_tot_pri:.1f} muertes/año ",
+        f"(−{100*(1-vz_tot_pri/vz_tot_base):.1f}%) — con {vz_units_pri:.2f} unidades de ",
+        f"inversión vs {vz_units_uni:.0f} de la uniforme (−{100*(1-vz_units_pri/vz_units_uni):.0f}% ",
+        "de presupuesto).",
+        f"- **Eficiencia +{100*vz_eff_gain:.0f}%** (vidas salvadas por unidad invertida): la ",
+        "priorizada concentra la reducción donde ocurren los atropellamientos ",
+        "(S, NE/Chichí Suárez, SSE, E, SE/Kanasín, WSW mantienen ~todo el recorte) y ",
+        "relaja los tramos de baja demanda medida (ENE, ESE). La uniforme sigue ",
+        "siendo el techo en vidas totales, pero cuesta ~22% más por solo 6.5 pp ",
+        "adicionales — la priorización es la opción eficiente.",
+        "",
+        "![Visión Cero priorizada](vision_cero_priorizada.png)",
         "",
         "## Por sector (línea base)",
         "",

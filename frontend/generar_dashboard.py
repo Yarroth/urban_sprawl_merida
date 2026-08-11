@@ -86,6 +86,22 @@ def main():
                 'style="max-width:560px;margin:0 auto;display:block">'
                 '</div>'
             )
+        if (SAFE / "vision_cero_priorizada.csv").exists():
+            vzdf = pd.read_csv(SAFE / "vision_cero_priorizada.csv")
+            hot = " · ".join(
+                f'{r["sector"]} −{r["Reducción priorizada %"]:.0f}%'
+                for _, r in vzdf.sort_values("Reducción priorizada %", ascending=False).head(6).iterrows()
+            )
+            safety += (
+                '<div class="temporal" style="text-align:center"><h2>Visión Cero: uniforme vs priorizada por demanda</h2>'
+                '<div class="sub">Al escalar los levers con la demanda peatonal (puntos de deseo de cruce), '
+                'la priorizada logra <b>−54%</b> con <b>−22% de presupuesto</b> vs la uniforme (−61%) — '
+                '<b>+14% de eficiencia</b> por unidad invertida. Hotspots: '
+                f'{hot}.</div>'
+                f'<img src="{b64(SAFE / "vision_cero_priorizada.png")}" alt="Visión Cero priorizada" '
+                'style="max-width:640px;margin:0 auto;display:block">'
+                '</div>'
+            )
         if (SAFE / "evolucion_temporal.csv").exists():
             safety += (
                 '<div class="temporal"><h2>Evolución temporal 2020–2025</h2>'
@@ -147,6 +163,63 @@ def main():
         for s in scenarios
     )
 
+    # ── Portada (solo impresión) ──
+    MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+             "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    hoy = datetime.date.today()
+    fecha_es = f"{hoy.day} de {MESES[hoy.month - 1]} de {hoy.year}"
+    cov_areas, cov_base = {}, {}
+    for s in scenarios:
+        grp = stats[stats["scenario"] == s].set_index("year")
+        cov_areas[s] = grp.loc[2030, "area_km2"]
+        cov_base[s] = grp.loc[2024, "area_km2"]
+    cov_deaths = cov_vc = None
+    if (SAFE / "resumen_escenarios.csv").exists():
+        sr = pd.read_csv(SAFE / "resumen_escenarios.csv").set_index("escenario")
+        cov_deaths = sr.loc["base", "muertes_año"]
+        cov_vc = sr.loc["vision_cero", "reduccion_pct"]
+    cov_cards = [
+        (str(metrics.get("auc_roc", "N/A")), "AUC-ROC transición"),
+        (str(metrics.get("ca_auc_roc", "N/A")), "AUC-ROC reglas CA"),
+        (f"{cov_areas['ia_optimo']:.1f} → {cov_areas['no_plan']:.1f} km²",
+         "Área 2030 (gestión IA → no plan)"),
+    ]
+    if cov_deaths is not None:
+        cov_cards.append((f"{cov_deaths:.0f} → −{cov_vc:.0f}%", "Muertes/año Periférico → Visión Cero"))
+    cover_cards_html = "".join(
+        f'<div class="cover-stat"><div class="v">{v}</div><div class="k">{k}</div></div>'
+        for v, k in cov_cards
+    )
+    cover = (
+        '<div class="cover">'
+        '<div class="cover-band">Universidad Politécnica de Yucatán · TSU en Ciencia de Datos</div>'
+        '<div><h1 class="cover-title">Predicción de la Expansión Urbana de Mérida</h1>'
+        '<div class="cover-sub">Proyección espacial 2026–2030 y seguridad peatonal del Anillo Periférico</div>'
+        '<div class="cover-meta">Pipeline v2.0 · LightGBM + Autómata Celular de reglas aprendidas + variables kársticas</div>'
+        '</div>'
+        '<div><hr class="cover-hr"><h2 class="cover-h2">Resumen ejecutivo</h2>'
+        f'<p class="cover-p">El modelo calibra la transición urbana de la Zona Metropolitana de Mérida '
+        f'(AUC-ROC {metrics.get("auc_roc", "N/A")} en la transición y {metrics.get("ca_auc_roc", "N/A")} '
+        'en las reglas del autómata celular) y proyecta el periodo 2026–2030 en tres escenarios: sin '
+        'planificación, plan tradicional y gestión IA. La superficie urbana crecería '
+        f'+{cov_areas["no_plan"] - cov_base["no_plan"]:.1f} km² sin plan frente a '
+        f'+{cov_areas["ia_optimo"] - cov_base["ia_optimo"]:.1f} km² con gestión IA, que además '
+        'reduce la fragmentación (144 vs 242 parches urbanos) y la presión sobre el acuífero kárstico '
+        'y los cenotes.</p>'
+    )
+    if cov_deaths is not None:
+        cover += (
+            f'<p class="cover-p">En el Anillo Periférico (~150,000 veh/día, {cov_deaths:.0f} muertes en 2025), los '
+            'escenarios de política vial reducen las muertes entre −26% (paradas de autobús accesibles) y '
+            f'−{cov_vc:.0f}% (Visión Cero). Priorizar las intervenciones por los puntos de deseo de cruce '
+            'alcanza −54% con −22% del presupuesto (+14% de eficiencia por unidad invertida).</p>'
+        )
+    cover += (
+        f'<div class="cover-stats">{cover_cards_html}</div></div>'
+        f'<div class="cover-author"><b>Héctor Javier Raya Romo</b> · Mérida, Yucatán · {fecha_es}</div>'
+        '</div>'
+    )
+
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     html = """<!DOCTYPE html>
 <html lang="es">
@@ -172,7 +245,7 @@ def main():
   .tab.active{border-bottom-color:var(--c,#7C4DFF);background:#1F2937}
   .scenario-grid{display:none;grid-template-columns:repeat(5,1fr);gap:12px}
   .scenario-grid.active{display:grid}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;min-width:0}
   .card img{width:100%;display:block;aspect-ratio:1/0.75;object-fit:cover}
   .cap{padding:8px 10px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
   .km2{color:var(--text);font-weight:600}
@@ -194,10 +267,47 @@ def main():
   .legend{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;margin:10px 0}
   .bar{width:180px;height:10px;border-radius:5px;background:linear-gradient(90deg,#FFFFB2,#FCDE00,#E53935,#7A0000)}
   footer{margin-top:36px;padding-top:14px;border-top:1px solid var(--border);color:var(--muted);font-size:12px}
+  /* Portada (solo impresión) */
+  .cover{display:none}
   @media (max-width:900px){.scenario-grid,.comp{grid-template-columns:repeat(2,1fr)}}
+  /* ── Impresión (entrega final) ── */
+  @page{size:A4 landscape;margin:10mm}
+  @media print{
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    :root{--bg:#ffffff;--panel:#ffffff;--border:#c9ccd1;--text:#1b1f24;--muted:#57606a}
+    body{padding:0;max-width:100%;font-size:11px}
+    h1{font-size:20px}
+    h2{break-before:page;break-after:avoid}
+    h2:first-of-type{break-before:auto}
+    .cover{display:flex;flex-direction:column;justify-content:space-between;align-items:center;
+           text-align:center;break-after:page;height:188mm;padding:6mm 18mm}
+    .cover-band{font-size:12px;letter-spacing:2px;color:#57606a;text-transform:uppercase}
+    .cover-title{font-size:34px;font-weight:800;color:#1b1f24;margin:6mm 0 2mm}
+    .cover-sub{font-size:16px;color:#57606a}
+    .cover-meta{margin-top:3mm;font-size:12px;color:#7C4DFF;font-weight:600}
+    .cover-hr{width:60mm;border:none;border-top:3px solid #7C4DFF;margin:6mm auto}
+    .cover-h2{font-size:15px;color:#7C4DFF;text-transform:uppercase;letter-spacing:1px;margin-bottom:3mm}
+    .cover-p{font-size:12px;line-height:1.55;color:#24292f;text-align:justify;max-width:230mm}
+    .cover-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8mm;width:100%;margin-top:5mm}
+    .cover-stat{border:1px solid #c9ccd1;border-radius:8px;padding:5mm 3mm}
+    .cover-stat .v{font-size:20px;font-weight:700;color:#1b1f24}
+    .cover-stat .k{font-size:10px;color:#57606a;margin-top:1mm}
+    .cover-author{margin-top:8mm;font-size:13px;color:#1b1f24}
+    .cover-author b{color:#7C4DFF}
+    .tabs{display:none}
+    .scenario-grid{display:grid !important;grid-template-columns:repeat(5,1fr) !important;break-before:page}
+    .scenario-grid .card{min-width:0}
+    .comp{grid-template-columns:repeat(3,1fr) !important}
+    .safety-grid{break-before:page;grid-template-columns:2fr 1fr 1fr !important}
+    .card,.temporal,.mcard,.safety-img img,.comp .card{break-inside:avoid}
+    .safety-img img{min-width:0}
+    table{background:#fff}
+    th{background:#f0f3f6;color:#333}
+  }
 </style>
 </head>
 <body>
+  %%COVER%%
   <h1>Resultados — Expansión Urbana Mérida 2026–2030</h1>
   <div class="sub">Pipeline v2.0 · LightGBM + CA de reglas aprendidas + variables kársticas · Generado el %%STAMP%%</div>
   <div class="meta">
@@ -254,7 +364,8 @@ def main():
                 .replace("%%TABS%%", "".join(tabs))
                 .replace("%%GRIDS%%", "".join(grids))
                 .replace("%%COMPS%%", comps)
-                .replace("%%SAFETY%%", safety))
+                .replace("%%SAFETY%%", safety)
+                .replace("%%COVER%%", cover))
 
     OUT.write_text(html, encoding="utf-8")
     print(f"Dashboard generado: {OUT} ({OUT.stat().st_size / 1024:.0f} KB)")
