@@ -18,7 +18,9 @@ con visualización interactiva.
 │   ├── 02_preprocess.py     # Clasificación LULC + 7-10 features (kársticas si hay datos)
 │   ├── 03_train_model.py    # LightGBM transición + LightGBM reglas CA (OOF sin fuga)
 │   ├── 04_simulate_ca.py    # Simulación CA 3 escenarios → results/maps/*.tif
-│   └── 05_visualize.py      # Mapas, gráficas por escenario, reporte
+│   ├── 05_visualize.py      # Mapas, gráficas por escenario, reporte
+│   ├── 06_calibrar_tasas.py # Calibración empírica de tasas (ZMM 1998–2020)
+│   └── 07_seguridad_peatonal.py  # Incidentes peatonales vs densidad (Periférico)
 ├── frontend/
 │   └── *.html               # Dashboards interactivos (probabilidad, comparación 3D)
 ├── docs/                    # Entregables: propuestas, estudios, speech, matemáticas
@@ -138,11 +140,61 @@ P_total = α · P_LightGBM + β · P_CA_aprendida + γ · (1 - P_kárstico) + δ
 | β (CA aprendida) | 0.30 | 0.30 | 0.25 |
 | γ (kárstico) | 0.00 | 0.05 | 0.15 |
 | δ (estocástico) | 0.10 | 0.10 | 0.05 |
-| Tasa anual de conversión | 3.5% | 3.1% | 2.7% |
+| Tasa anual de conversión | 3.5% | 3.1% | 2.3% |
 
 La tasa anual por escenario (campo `growth_rate` en `CA_CONFIG["scenarios"]`)
 modula el cupo de conversión del CA: los escenarios con gestión crecen menos y
 distinto, de modo que el área proyectada diverge además de la ubicación.
+
+## Calibración empírica de tasas (ZMM 1998–2020)
+
+Las tasas por escenario se calibraron contra la evolución histórica real de la
+Zona Metropolitana de Mérida. El script `scripts/06_calibrar_tasas.py`
+reconstruye la TCMA observada en los LULC del pipeline, la contrasta con estas
+referencias y verifica `CA_CONFIG` (reporte: `results/reports/calibracion_tasas.md`):
+
+| Indicador (fuente) | Periodo | Crecimiento | TCMA |
+|---|---|---|---|
+| Superficie construida ZMM (IMEPLAN) | 2000–2020 | 211 → 422 km² (×2.0) | **3.5%/año** |
+| Expansión urbana ZMM (CitiesAdapt/GIZ) | 2000–2020 | +84.6% | **3.1%/año** |
+| Mancha urbana, dispersión rápida (López Santillán) | 1998–2010 | 159 → 270 km² | 4.5%/año |
+| Población ZMM (INEGI/EURE) | 2010–2020 | 1.3 M hab. | 2.24%/año |
+
+| Escenario | Regla | Tasa |
+|---|---|---|
+| `no_plan` | Dispersión = tendencia histórica observada (IMEPLAN) | **3.5%** |
+| `plan_trad` | Tendencia con instrumentos tradicionales (Diagnóstico CitiesAdapt) | **3.1%** |
+| `ia_optimo` | Densificación = el suelo crece al ritmo de la población (2.24%) | **2.3%** |
+
+La brecha entre la TCMA de superficie (~3.5%) y la poblacional (~2.2%) mide la
+dispersión histórica de la ZMM (~1.3 puntos porcentuales/año): el escenario
+`ia_optimo` la elimina (densificación completa), mientras que `no_plan` la
+reproduce. Con datos LULC reales (fuera del rango plausible 2–6% el script
+avisa y usa las referencias publicadas, como ocurre con los sintéticos de la
+demo).
+
+---
+
+## Módulo de seguridad peatonal — Anillo Periférico
+
+Valida la relación **incidentes peatonales ↔ densidad vehicular** en el
+Periférico de Mérida (~150,000 veh/día; 20–25 muertes/año, **17 en 2025**;
+~68% de las víctimas son peatones) y simula 5 escenarios de política urbana
+(`python scripts/07_seguridad_peatonal.py` → `results/safety/`):
+
+| Escenario | Muertes/año | Reducción | Mecanismo |
+|-----------|-------------|-----------|-----------|
+| Situación actual (2025) | 17.0 | — | línea base calibrada |
+| Semaforización coordinada | 12.4 | −27% | fases peatonales + LPI en cruces |
+| Pirámide de movilidad | 9.8 | −42% | 80→60 km/h en tramos urbanos + cruces prioritarios |
+| Paradas de autobús accesibles | 12.6 | −26% | traslado modal (−15% volumen) + cruces seguros en paradas |
+| Visión Cero (todo combinado) | 6.9 | **−60%** | volumen + velocidad + infraestructura se potencian |
+
+Modelo: `muertes = base × (V_esc/V_base)^0.6 × severidad(v) × [0.6·cross·stops + 0.4]`,
+con severidad por velocidad según la curva de fatalidad peatonal WHO (2008:
+30 km/h→10% … 80 km/h→95%). Calibrado contra cifras publicadas (Gob. de
+Yucatán, Diario de Yucatán, Azteca Yucatán; ver `config/settings.py` →
+`SAFETY_CONFIG` y `results/safety/seguridad_peatonal.md`).
 
 ---
 

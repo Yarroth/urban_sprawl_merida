@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import joblib
-from scipy.ndimage import uniform_filter, distance_transform_edt
+from scipy.ndimage import uniform_filter, distance_transform_edt, label, binary_erosion
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config.settings import CA_CONFIG, PREDICT_YEARS, BASE_YEAR, PATHS, PIXEL_RESOLUTION, STUDY_AREA
@@ -215,13 +215,26 @@ def simulate_scenario(lgbm_model, ca_model, urban_base, features, profile,
 
 
 def compute_statistics(urban_series_all):
+    """
+    Estadísticas por escenario y año. Además del área, calcula métricas
+    espaciales de calidad de la expansión:
+      - n_patches: número de parches urbanos conectados (fragmentación)
+      - edge_km_per_km2: borde urbano/no-urbano (km) por km² de área urbana;
+        valores menores = expansión más compacta
+    """
     rows = []
     for scenario, series in urban_series_all.items():
         for year, urban in sorted(series.items()):
             area = urban.sum() * PIXEL_RESOLUTION**2 / 1e6
+            urban_bool = urban.astype(bool)
+            n_patches = int(label(urban_bool)[1])
+            edge_px = int(urban_bool.sum() - binary_erosion(urban_bool).sum())
+            edge_km_per_km2 = edge_px * PIXEL_RESOLUTION / 1000 / max(area, 1e-9)
             rows.append({"scenario": scenario, "year": year,
                          "area_km2": round(area, 2),
-                         "area_ha":  round(area*100, 1)})
+                         "area_ha":  round(area*100, 1),
+                         "n_patches": n_patches,
+                         "edge_km_per_km2": round(edge_km_per_km2, 3)})
     df = pd.DataFrame(rows)
     df["growth_km2"] = df.groupby("scenario")["area_km2"].diff().fillna(0).round(2)
     df["growth_pct"]  = (df["growth_km2"] / df.groupby("scenario")["area_km2"].shift(1) * 100).fillna(0).round(2)

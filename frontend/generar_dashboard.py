@@ -12,6 +12,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 MAPS, REP = ROOT / "results" / "maps", ROOT / "results" / "reports"
+SAFE = ROOT / "results" / "safety"
 OUT = ROOT / "frontend" / "dashboard_resultados.html"
 
 scenarios = ["no_plan", "plan_trad", "ia_optimo"]
@@ -33,6 +34,40 @@ def main():
     stats = pd.read_csv(REP / "area_statistics.csv")
     metrics = pd.read_csv(REP / "metrics.csv").iloc[0]
 
+    # Seguridad peatonal (módulo 07, si fue ejecutado)
+    safety = ""
+    safety_hint = ""
+    if (SAFE / "resumen_escenarios.csv").exists():
+        sres = pd.read_csv(SAFE / "resumen_escenarios.csv")
+        srows = []
+        S_LABEL = {"base": "Situación actual", "semaforizacion": "Semaforización coordinada",
+                   "piramide_movilidad": "Pirámide de movilidad",
+                   "transito_accesible": "Paradas de autobús accesibles", "vision_cero": "Visión Cero (todo)"}
+        for _, r in sres.iterrows():
+            red = f'−{r["reduccion_pct"]:.0f}%' if r["escenario"] != "base" else "—"
+            saved = f'{r["vidas_salvadas"]:.0f}' if r["escenario"] != "base" else "—"
+            srows.append(
+                f'<tr><td>{S_LABEL.get(r["escenario"], r["escenario"])}</td>'
+                f'<td>{r["muertes_año"]:.1f}</td><td>{r["peatones_año"]:.1f}</td>'
+                f'<td class="delta">{red}</td><td>{saved}</td></tr>'
+            )
+        base_row = sres[sres["escenario"] == "base"].iloc[0]
+        safety = (
+            '<div class="safety-grid">'
+            '<div><h2>Seguridad peatonal — Periférico</h2>'
+            '<div class="sub">Valida incidentes peatonales vs densidad vehicular (~150k veh/día) '
+            f'y escenarios de política. Línea base: {base_row["muertes_año"]:.0f} muertes/año '
+            f'({base_row["peatones_año"]:.0f} peatonales) en 2025.</div>'
+            '<table><thead><tr><th>Escenario</th><th>Muertes/año</th><th>Peatones/año</th>'
+            '<th>Reducción</th><th>Vidas salvadas</th></tr></thead>'
+            f'<tbody>{"".join(srows)}</tbody></table></div>'
+            f'<div class="safety-img"><img src="{b64(SAFE / "incidentes_por_escenario.png")}" '
+            'alt="Muertes por escenario"></div>'
+            f'<div class="safety-img"><img src="{b64(SAFE / "curva_densidad_incidentes.png")}" '
+            'alt="Curva densidad vs incidentes"></div>'
+            '</div>'
+        )
+
     thead = "<tr><th>Escenario</th>" + "".join(f"<th>{y}</th>" for y in years) + "<th>Δ base → 2030</th></tr>"
     trows = []
     for s in scenarios:
@@ -44,6 +79,25 @@ def main():
             f"{cells}<td class='delta'>+{final - base:.1f} km²</td></tr>"
         )
     table = f"<table><thead>{thead}</thead><tbody>{''.join(trows)}</tbody></table>"
+
+    # Calidad espacial (2030): fragmentación y densidad de borde
+    spatial_table = ""
+    if "n_patches" in stats.columns and "edge_km_per_km2" in stats.columns:
+        st_rows = []
+        for s in scenarios:
+            grp = stats[stats["scenario"] == s].set_index("year")
+            r = grp.loc[2030]
+            mean_patch = r["area_km2"] / max(r["n_patches"], 1)
+            st_rows.append(
+                f'<tr><td><span class="dot" style="background:{SC_COLOR[s]}"></span>{SC_LABEL[s]}</td>'
+                f'<td>{r["area_km2"]:.1f}</td><td>{int(r["n_patches"])}</td>'
+                f'<td>{mean_patch:.3f}</td><td>{r["edge_km_per_km2"]:.2f}</td></tr>'
+            )
+        spatial_table = (
+            "<table><thead><tr><th>Escenario</th><th>Área 2030 (km²)</th>"
+            "<th>Parches urbanos</th><th>Área media/parche (km²)</th><th>Borde (km/km²)</th></tr></thead>"
+            f"<tbody>{''.join(st_rows)}</tbody></table>"
+        )
 
     tabs, grids = [], []
     for s in scenarios:
@@ -92,6 +146,10 @@ def main():
   .cap{padding:8px 10px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
   .km2{color:var(--text);font-weight:600}
   .comp{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .safety-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;align-items:start}
+  .safety-grid h2{grid-column:1/-1;margin-top:0}
+  .safety-img img{width:100%;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+  @media (max-width:900px){.safety-grid{grid-template-columns:1fr}}
   table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:13px}
   th,td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--border)}
   th:first-child,td:first-child{text-align:left}
@@ -117,6 +175,11 @@ def main():
   <h2>Área urbana proyectada (km²)</h2>
   %%TABLE%%
 
+  <h2>Calidad espacial de la expansión (2030)</h2>
+  %%SPATIAL%%
+  <div class="sub">Mayor área media por parche y menor borde por km² = expansión más compacta.
+  El borde por km² tiende a ser mayor en áreas urbanas más pequeñas (efecto de escala).</div>
+
   <h2>Mapas de probabilidad por escenario y año</h2>
   <div class="legend"><span>Probabilidad:</span><span class="bar"></span><span>0.2 → 1.0</span></div>
   <div class="tabs">%%TABS%%</div>
@@ -124,6 +187,8 @@ def main():
 
   <h2>Comparación 2024 → 2030 por escenario</h2>
   <div class="comp">%%COMPS%%</div>
+
+  %%SAFETY%%
 
   <footer>
     Archivos de origen: <code>results/maps/</code> (GeoTIFFs y PNG) y <code>results/reports/</code>.
@@ -150,9 +215,11 @@ def main():
                 .replace("%%CA_AUC%%", str(metrics.get("ca_auc_roc", "N/A")))
                 .replace("%%FEAT%%", str(metrics.get("n_features", "?")))
                 .replace("%%TABLE%%", table)
+                .replace("%%SPATIAL%%", spatial_table)
                 .replace("%%TABS%%", "".join(tabs))
                 .replace("%%GRIDS%%", "".join(grids))
-                .replace("%%COMPS%%", comps))
+                .replace("%%COMPS%%", comps)
+                .replace("%%SAFETY%%", safety))
 
     OUT.write_text(html, encoding="utf-8")
     print(f"Dashboard generado: {OUT} ({OUT.stat().st_size / 1024:.0f} KB)")

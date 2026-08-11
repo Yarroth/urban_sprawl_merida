@@ -109,10 +109,18 @@ CA_CONFIG = {
     "ca_rule_features": FEATURE_NAMES + ["p_lgbm"],
 
     # Escenarios predefinidos
-    # growth_rate: tasa de conversión anual por escenario. Los escenarios con
-    # gestión (plan_trad/ia_optimo) desaceleran la expansión frente a no_plan,
-    # reflejando compactación/densificación en lugar de dispersión. El área
-    # proyectada por escenario así diverge además de la ubicación.
+    # growth_rate: tasa de conversión anual por escenario, calibrada contra la
+    # evolución histórica de la ZMM 2000-2020 (ver scripts/06_calibrar_tasas.py):
+    #   no_plan    3.5%/año = TCMA de superficie construida ZMM 2000→2020
+    #                         (21 103 → 42 186 ha, IMEPLAN vía Novedades Yucatán)
+    #   plan_trad  3.1%/año = TCMA de expansión urbana ZMM 2000→2020
+    #                         (+84.6% total, Diagnóstico CitiesAdapt GIZ)
+    #   ia_optimo  2.3%/año = convergencia a la TCMA poblacional de la ZMM
+    #                         (2.24%/año 2010-2020, INEGI; núcleo Mérida 2.2%)
+    #                         = densificación: el suelo crece al ritmo de la
+    #                           población, no más rápido (dispersión ≈ +1.3 pp).
+    # La gestión desacelera la expansión frente a no_plan, de modo que el área
+    # proyectada diverge además de la ubicación.
     "scenarios": {
         "no_plan":    {"alpha":0.60,"beta":0.30,"gamma":0.00,"delta":0.10,
                        "exclusions":[], "growth_rate": 0.035},
@@ -120,7 +128,7 @@ CA_CONFIG = {
                        "exclusions":["cenotes","reservas"], "growth_rate": 0.031},
         "ia_optimo":  {"alpha":0.55,"beta":0.25,"gamma":0.15,"delta":0.05,
                        "exclusions":["cenotes","reservas","lst_hotspots","karst_alta"],
-                       "growth_rate": 0.027},
+                       "growth_rate": 0.023},
     },
 }
 
@@ -152,4 +160,51 @@ VIZ_CONFIG = {
     "figsize": (18, 8),
     "colormap_probability": "YlOrRd",
     "scenario_colors": {"no_plan":"#E53935","plan_trad":"#43A047","ia_optimo":"#7C4DFF"},
+}
+
+# ── SEGURIDAD PEATONAL — ANILLO PERIFÉRICO DE MÉRIDA ★ ───────
+# Módulo 07: valida la relación incidentes peatonales vs densidad vehicular y
+# simula escenarios de política (pirámide de movilidad, semaforización,
+# paradas accesibles). Fuentes usadas para la calibración:
+#   - Aforo del Periférico: ~150,000 veh/día (+20% en temporada) — Gob. de
+#     Yucatán (2025), SIPSE (2015).
+#   - Muertes en el Periférico: 20–25/año históricas; 17 en 2025 — Diario de
+#     Yucatán; 2022 (ene–abr): 186 accidentes, 147 lesionados, 5 muertes —
+#     Azteca Yucatán (vía Top 5 nacional de vías peligrosas).
+#   - Peatones entre las víctimas: ~68% (34 de 50 fallecidos por atropellamiento
+#     en el anillo).
+#   - Parque vehicular ZMM: ~838,726 vehículos (2023); 1.8 personas/veh (2020).
+SAFETY_CONFIG = {
+    "ring_length_km": 48.0,          # longitud aproximada del anillo
+    "aadt_total": 150_000,           # veh/día en toda la sección
+    "baseline_deaths_year": 17,      # muertes totales 2025 (ancla de calibración)
+    "pedestrian_share": 0.68,        # fracción de víctimas que son peatones
+    "speed_limit_kmh": 80,           # límite nominal actual
+    "crossing_share": 0.60,          # fracción de muertes en cruces con semáforo
+    "volume_exponent": 0.6,          # elasticidad incidentes vs volumen (0.5–1.0 en literatura)
+    "speed_fatality_exponent": 3.0,  # severidad ∝ (V/80)^3 (curva WHO/ETSC)
+    # 8 sectores del anillo (~6 km c/u); pond = fracción del aforo total
+    "segments": [
+        {"name": "N",  "weight": 0.16, "crossings": 6, "bridges": 2, "bus_stops": 5, "urban": True},
+        {"name": "NE", "weight": 0.14, "crossings": 5, "bridges": 1, "bus_stops": 4, "urban": True},
+        {"name": "E",  "weight": 0.13, "crossings": 4, "bridges": 1, "bus_stops": 3, "urban": False},
+        {"name": "SE", "weight": 0.11, "crossings": 3, "bridges": 1, "bus_stops": 2, "urban": False},
+        {"name": "S",  "weight": 0.11, "crossings": 4, "bridges": 1, "bus_stops": 3, "urban": True},
+        {"name": "SW", "weight": 0.11, "crossings": 4, "bridges": 1, "bus_stops": 3, "urban": True},
+        {"name": "W",  "weight": 0.12, "crossings": 5, "bridges": 1, "bus_stops": 4, "urban": True},
+        {"name": "NW", "weight": 0.12, "crossings": 5, "bridges": 1, "bus_stops": 4, "urban": False},
+    ],
+    # Levers por escenario (factores multiplicativos sobre la tasa de muertes):
+    #   vol  = cambio de volumen vehicular (1.0 = sin cambio)
+    #   speed= límite efectivo en tramos urbanos (km/h)
+    #   cross= factor de riesgo en cruces semaforizados (semáforos coordinados,
+    #          fases peatonales, LPI, cruces protegidos)
+    #   stops= factor de riesgo en cruces asociados a paradas de autobús
+    "scenarios": {
+        "base":               {"vol": 1.00, "speed": 80, "cross": 1.00, "stops": 1.00},
+        "semaforizacion":     {"vol": 1.00, "speed": 80, "cross": 0.55, "stops": 1.00},
+        "piramide_movilidad": {"vol": 0.95, "speed": 60, "cross": 0.50, "stops": 1.00},
+        "transito_accesible": {"vol": 0.85, "speed": 80, "cross": 1.00, "stops": 0.70},
+        "vision_cero":        {"vol": 0.80, "speed": 60, "cross": 0.40, "stops": 0.60},
+    },
 }
