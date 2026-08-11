@@ -46,16 +46,32 @@ def load_array(path):
     return None, None
 
 
+def read_band_names(path):
+    """Lee los nombres de banda de un GeoTIFF de features (tags 'name')."""
+    if not (RASTERIO_OK and path.endswith(".tif") and os.path.exists(path)):
+        return []
+    import rasterio
+    with rasterio.open(path) as src:
+        return [src.tags(i).get("name") or "" for i in range(1, src.count + 1)]
+
+
 def save_array(arr, path, profile):
+    """
+    Guarda un raster como GeoTIFF (v2.0). El dtype se deduce del array, así
+    que sirve tanto para probabilidades float32 como para máscaras uint8.
+    Si rasterio no está disponible o el path no es .tif, cae a .npy.
+    """
     if RASTERIO_OK and path.endswith(".tif") and profile:
         import rasterio
         p = profile.copy()
-        if arr.ndim == 2: arr = arr[np.newaxis,...]
-        p.update(count=arr.shape[0], compress="lzw")
+        if arr.ndim == 2:
+            arr = arr[np.newaxis, ...]
+        p.update(count=arr.shape[0], dtype=arr.dtype.name, compress="lzw")
+        p.pop("nodata", None)
         with rasterio.open(path, "w", **p) as dst:
             dst.write(arr)
     else:
-        np.save(path.replace(".tif",".npy"), arr)
+        np.save(path.replace(".tif", ".npy"), arr)
 
 
 def build_karst_prob(urban, lst_map, karst_vuln, cenote_dist, cfg):
@@ -142,12 +158,16 @@ def simulate_scenario(lgbm_model, ca_model, urban_base, features, profile,
         # P_LightGBM
         non_urban_mask = (current == 0).ravel()
         if features is not None:
-            X_pred = features.reshape(features.shape[0],-1).T[non_urban_mask]
-            X_pred[np.isnan(X_pred)] = 0
-            p_lgbm_vals = lgbm_model.predict_proba(X_pred)[:,1]
-            p_lgbm = np.zeros(current.size, dtype=np.float32)
-            p_lgbm[non_urban_mask] = p_lgbm_vals
-            p_lgbm = p_lgbm.reshape(current.shape)
+            try:
+                X_pred = features.reshape(features.shape[0],-1).T[non_urban_mask]
+                X_pred[np.isnan(X_pred)] = 0
+                p_lgbm_vals = lgbm_model.predict_proba(X_pred)[:,1]
+                p_lgbm = np.zeros(current.size, dtype=np.float32)
+                p_lgbm[non_urban_mask] = p_lgbm_vals
+                p_lgbm = p_lgbm.reshape(current.shape)
+            except Exception as e:
+                log.warning(f"  P_LightGBM falló ({e}) — usando 0.0 en escenario {scenario}")
+                p_lgbm = np.zeros_like(current, dtype=np.float32)
         else:
             p_lgbm = np.zeros_like(current, dtype=np.float32)
 
@@ -178,11 +198,11 @@ def simulate_scenario(lgbm_model, ca_model, urban_base, features, profile,
         delta_km2 = (new_urban.sum() - current.sum()) * PIXEL_RESOLUTION**2 / 1e6
         log.info(f"    {year}: {area:.1f} km² (+{delta_km2:.2f} km²)")
 
-        # Guardar
+        # Guardar GeoTIFFs (float32 probabilidad, uint8 binario)
         pred_path = PATHS["prediction"].format(year=year, scenario=scenario)
-        ext_path  = os.path.join(PATHS["results_maps"], f"urban_extent_{year}_{scenario}.npy")
-        save_array(p_total, pred_path.replace(".tif",".npy"), profile)
-        np.save(ext_path, new_urban)
+        ext_path  = PATHS["urban_extent"].format(year=year, scenario=scenario)
+        save_array(p_total, pred_path, profile)
+        save_array(new_urban, ext_path, profile)
 
         urban_series[year] = new_urban.copy()
         current = new_urban
@@ -231,27 +251,43 @@ def main():
     feat_arr, _ = load_array(feat_path)
     features = feat_arr.astype(np.float32) if feat_arr is not None else None
 
-    # Capas kársticas (sintéticas si no existen)
+    # Capas kársticas: se leen de los bands del stack de features (v2.0).
+    # Si no están disponibles, se generan sintéticas con un AVISO claro.
     lst_map, cenote_dist, karst_vuln = None, None, None
-    lst_path = PATHS["lst"].format(year=BASE_YEAR)
-    if os.path.exists(lst_path.replace(".tif",".npy")):
-        lst_map = np.load(lst_path.replace(".tif",".npy"))
-        log.info("  LST cargado")
-    if os.path.exists(PATHS["cenotes"]):
-        log.info("  Cenotes cargados")
-    # Si no existen datos reales, generar sintéticos para demo
+    missing_karst = []
+
+    if features is not None:
+        feat_names = read_band_names(feat_path)
+        bands_by_name = {}
+        for name in ("lst_mean", "dist_cenote", "karst_vuln"):
+            if name in feat_names:
+                bands_by_name[name] = features[feat_names.index(name)].astype(np.float32)
+                log.info(f"  Capa kárstica cargada: {name}")
+            else:
+                missing_karst.append(name)
+        lst_map     = bands_by_name.get("lst_mean")
+        cenote_dist = bands_by_name.get("dist_cenote")
+        karst_vuln  = bands_by_name.get("karst_vuln")
+    else:
+        missing_karst = ["lst_mean", "dist_cenote", "karst_vuln"]
+
+    # Fallbacks sintéticos para la demo
     if lst_map is None:
-        lst_map = 32 + rng.uniform(0,5,urban_base.shape).astype(np.float32)
-        lst_map[urban_base==1] += 2  # UHI
-        log.info("  LST sintético generado para demo")
+        lst_map = 32 + rng.uniform(0, 5, urban_base.shape).astype(np.float32)
+        lst_map[urban_base == 1] += 2  # isla de calor urbana
     if cenote_dist is None:
-        cx, cy = urban_base.shape[0]//4, urban_base.shape[1]//4
+        cx, cy = urban_base.shape[0] // 4, urban_base.shape[1] // 4
         rows, cols = np.mgrid[0:urban_base.shape[0], 0:urban_base.shape[1]]
-        cenote_dist = np.sqrt((rows-cx)**2+(cols-cy)**2).astype(np.float32)*PIXEL_RESOLUTION
-        log.info("  Distancia a cenotes sintética para demo")
+        cenote_dist = np.sqrt((rows - cx)**2 + (cols - cy)**2).astype(np.float32) * PIXEL_RESOLUTION
     if karst_vuln is None:
         karst_vuln = rng.uniform(0.1, 0.8, urban_base.shape).astype(np.float32)
-        log.info("  Vulnerabilidad kárstica sintética para demo")
+
+    if missing_karst:
+        log.warning("=" * 58)
+        log.warning("AVISO: datos kársticos REALES no disponibles"
+                    f" ({', '.join(missing_karst)}) — usando capas SINTÉTICAS.")
+        log.warning("Los escenarios plan_trad/ia_optimo NO son representativos de Mérida.")
+        log.warning("=" * 58)
 
     # Simular tres escenarios
     all_series = {}

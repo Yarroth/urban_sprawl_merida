@@ -3,10 +3,10 @@ scripts/05_visualize.py
 Genera mapas, figuras y reporte final del proyecto.
 
 Salidas en results/:
-  - maps/expansion_map_{year}.png     → mapa de probabilidad sobre base cartográfica
-  - maps/comparison_2024_2030.png     → comparación antes/después
-  - maps/animated_growth.gif          → animación del crecimiento 2025–2030
-  - reports/final_report.md           → reporte ejecutivo en Markdown
+  - maps/expansion_map_{year}_{scenario}.png     → mapa de probabilidad por año y escenario
+  - maps/comparison_2024_2030_{scenario}.png     → comparación antes/después por escenario
+  - reports/area_statistics.png                  → evolución del área por escenario
+  - reports/final_report.md                      → reporte ejecutivo en Markdown
 """
 
 import os
@@ -27,8 +27,10 @@ from rasterio.plot import show
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config.settings import (
-    PREDICT_YEARS, BASE_YEAR, PATHS, PIXEL_RESOLUTION, VIZ_CONFIG
+    PREDICT_YEARS, BASE_YEAR, PATHS, PIXEL_RESOLUTION, VIZ_CONFIG, CA_CONFIG
 )
+
+SCENARIOS = list(CA_CONFIG["scenarios"].keys())
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -38,14 +40,14 @@ log = logging.getLogger(__name__)
 # MAPA DE PROBABILIDADES
 # ─────────────────────────────────────────────────────────────
 
-def plot_probability_map(year: int, base_urban: np.ndarray = None):
+def plot_probability_map(year: int, scenario: str, base_urban: np.ndarray = None):
     """
-    Genera un mapa de probabilidad de urbanización para un año dado.
+    Genera un mapa de probabilidad de urbanización para un año y escenario.
     Superpone la probabilidad sobre el área urbana base.
     """
-    pred_path = PATHS["prediction"].format(year=year)
+    pred_path = PATHS["prediction"].format(year=year, scenario=scenario)
     if not os.path.exists(pred_path):
-        log.warning(f"  Predicción {year} no encontrada: {pred_path}")
+        log.warning(f"  Predicción {year}/{scenario} no encontrada: {pred_path}")
         return
 
     with rasterio.open(pred_path) as src:
@@ -82,7 +84,7 @@ def plot_probability_map(year: int, base_urban: np.ndarray = None):
     ax.legend(handles=legend_elements, loc="lower left", facecolor="#2C3E50",
               edgecolor="gray", labelcolor="white", fontsize=9)
 
-    ax.set_title(f"Probabilidad de Expansión Urbana — Mérida, Yucatán\nAño {year}",
+    ax.set_title(f"Probabilidad de Expansión Urbana — Mérida, Yucatán\nAño {year} · Escenario: {scenario}",
                  fontsize=14, fontweight="bold", color="white", pad=15)
     ax.set_xlabel("Longitud", color="white")
     ax.set_ylabel("Latitud", color="white")
@@ -91,21 +93,21 @@ def plot_probability_map(year: int, base_urban: np.ndarray = None):
         spine.set_edgecolor("gray")
     fig.patch.set_facecolor("#1C2833")
 
-    out_path = os.path.join(PATHS["results_maps"], f"expansion_map_{year}.png")
+    out_path = os.path.join(PATHS["results_maps"], f"expansion_map_{year}_{scenario}.png")
     plt.tight_layout()
     fig.savefig(out_path, dpi=VIZ_CONFIG["dpi"], facecolor=fig.get_facecolor())
     plt.close()
-    log.info(f"  ✓ Mapa {year}: {out_path}")
+    log.info(f"  ✓ Mapa {year}/{scenario}: {out_path}")
 
 
 # ─────────────────────────────────────────────────────────────
 # COMPARACIÓN 2024 vs 2030
 # ─────────────────────────────────────────────────────────────
 
-def plot_comparison_2024_2030():
-    """Panel comparativo del área urbana en 2024 vs. proyección 2030."""
+def plot_comparison_2024_2030(scenario: str):
+    """Panel comparativo del área urbana en 2024 vs. proyección 2030 (por escenario)."""
     base_path  = PATHS["lulc_base"].format(year=BASE_YEAR)
-    pred_path  = os.path.join(PATHS["results_maps"], f"urban_extent_2030.tif")
+    pred_path  = PATHS["urban_extent"].format(year=2030, scenario=scenario)
 
     if not os.path.exists(base_path):
         log.warning("LULC base no disponible para comparación.")
@@ -150,7 +152,7 @@ def plot_comparison_2024_2030():
                      ha="center", va="center", transform=axes[1].transAxes,
                      color="white", fontsize=12)
 
-    axes[1].set_title("Proyección Urbana 2030 (simulada)", fontsize=13,
+    axes[1].set_title(f"Proyección Urbana 2030 — {scenario}", fontsize=13,
                        fontweight="bold", color="white")
 
     for ax in axes:
@@ -168,15 +170,15 @@ def plot_comparison_2024_2030():
     axes[1].legend(handles=legend_elements, loc="lower left",
                    facecolor="#1C2833", edgecolor="#444", labelcolor="white")
 
-    fig.suptitle("Expansión Urbana — Mérida, Yucatán\nComparación 2024 → 2030",
+    fig.suptitle(f"Expansión Urbana — Mérida, Yucatán\nComparación 2024 → 2030 · Escenario: {scenario}",
                  fontsize=15, fontweight="bold", color="white", y=1.01)
 
-    out_path = os.path.join(PATHS["results_maps"], "comparison_2024_2030.png")
+    out_path = os.path.join(PATHS["results_maps"], f"comparison_2024_2030_{scenario}.png")
     plt.tight_layout()
     fig.savefig(out_path, dpi=VIZ_CONFIG["dpi"], bbox_inches="tight",
                 facecolor=fig.get_facecolor())
     plt.close()
-    log.info(f"  ✓ Comparación 2024-2030: {out_path}")
+    log.info(f"  ✓ Comparación 2024-2030 ({scenario}): {out_path}")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -184,18 +186,18 @@ def plot_comparison_2024_2030():
 # ─────────────────────────────────────────────────────────────
 
 def plot_area_statistics():
-    """Gráfica de evolución del área urbana y crecimiento anual."""
+    """Gráfica de evolución del área urbana y crecimiento anual por escenario."""
     stats_path = os.path.join(PATHS["results_reports"], "area_statistics.csv")
     if not os.path.exists(stats_path):
         log.warning("Estadísticas de área no disponibles.")
         return
 
     df = pd.read_csv(stats_path)
+    scenarios = list(df["scenario"].unique())
+    colors = VIZ_CONFIG["scenario_colors"]
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 9))
     fig.patch.set_facecolor("#0D1117")
-    color_area   = "#42A5F5"
-    color_growth = "#EF5350"
 
     for ax in [ax1, ax2]:
         ax.set_facecolor("#161B22")
@@ -204,34 +206,43 @@ def plot_area_statistics():
         ax.spines["right"].set_visible(False)
         for spine in ax.spines.values():
             spine.set_edgecolor("#333")
+        ax.xaxis.set_tick_params(labelcolor="#CCC")
+        ax.yaxis.set_tick_params(labelcolor="#CCC")
 
-    # Área total
-    historical = df[df["year"] <= BASE_YEAR]
-    predicted  = df[df["year"] > BASE_YEAR]
-
-    ax1.fill_between(df["year"], df["area_km2"], alpha=0.2, color=color_area)
-    ax1.plot(historical["year"], historical["area_km2"], "o-", color=color_area,
-             linewidth=2, markersize=8, label="Histórico")
-    ax1.plot(predicted["year"],  predicted["area_km2"],  "s--", color="#FFA726",
-             linewidth=2, markersize=8, label="Proyectado")
-    ax1.axvline(x=BASE_YEAR, color="#555", linestyle=":", linewidth=1.5, label=f"Año base ({BASE_YEAR})")
+    # Área total por escenario
+    for scenario in scenarios:
+        grp = df[df["scenario"] == scenario].sort_values("year")
+        color = colors.get(scenario, "#42A5F5")
+        hist = grp[grp["year"] <= BASE_YEAR]
+        pred = grp[grp["year"] > BASE_YEAR]
+        ax1.fill_between(grp["year"], grp["area_km2"], alpha=0.12, color=color)
+        ax1.plot(hist["year"], hist["area_km2"], "o-", color=color,
+                 linewidth=2, markersize=7, label=f"{scenario} (histórico)")
+        ax1.plot(pred["year"], pred["area_km2"], "s--", color=color,
+                 linewidth=2, markersize=7, label=f"{scenario} (proyectado)")
+    ax1.axvline(x=BASE_YEAR, color="#555", linestyle=":", linewidth=1.5,
+                label=f"Año base ({BASE_YEAR})")
     ax1.set_ylabel("Área urbana (km²)", color="#CCC", fontsize=11)
-    ax1.set_title("Evolución del Área Urbana — Mérida, Yucatán", color="white",
-                   fontsize=13, fontweight="bold")
-    ax1.legend(facecolor="#1C2833", edgecolor="#444", labelcolor="white")
-    ax1.yaxis.set_tick_params(labelcolor="#CCC")
-    ax1.xaxis.set_tick_params(labelcolor="#CCC")
+    ax1.set_title("Evolución del Área Urbana por Escenario — Mérida, Yucatán",
+                  color="white", fontsize=13, fontweight="bold")
+    ax1.legend(facecolor="#1C2833", edgecolor="#444", labelcolor="white", fontsize=9)
 
-    # Crecimiento anual
-    growth_data = df[df["growth_km2"] > 0]
-    colors_bar = ["#42A5F5" if y <= BASE_YEAR else "#FFA726" for y in growth_data["year"]]
-    ax2.bar(growth_data["year"], growth_data["growth_km2"], color=colors_bar,
-            edgecolor="none", alpha=0.85)
+    # Crecimiento anual por escenario (barras agrupadas)
+    years = sorted(df["year"].unique())
+    n_sc = len(scenarios)
+    width = 0.8 / max(n_sc, 1)
+    x = np.arange(len(years))
+    for i, scenario in enumerate(scenarios):
+        grp = df[df["scenario"] == scenario].sort_values("year")
+        color = colors.get(scenario, "#888")
+        ax2.bar(x + (i - (n_sc - 1) / 2) * width, grp["growth_km2"],
+                width=width, label=scenario, color=color, alpha=0.85, edgecolor="none")
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(years, color="#CCC")
     ax2.set_ylabel("Crecimiento anual (km²)", color="#CCC", fontsize=11)
     ax2.set_xlabel("Año", color="#CCC", fontsize=11)
-    ax2.set_title("Crecimiento Anual del Área Urbana", color="white", fontsize=12)
-    ax2.yaxis.set_tick_params(labelcolor="#CCC")
-    ax2.xaxis.set_tick_params(labelcolor="#CCC")
+    ax2.set_title("Crecimiento Anual por Escenario", color="white", fontsize=12)
+    ax2.legend(facecolor="#1C2833", edgecolor="#444", labelcolor="white", fontsize=9)
 
     plt.tight_layout()
     out_path = os.path.join(PATHS["results_reports"], "area_statistics.png")
@@ -245,60 +256,67 @@ def plot_area_statistics():
 # ─────────────────────────────────────────────────────────────
 
 def generate_report():
-    """Genera un reporte ejecutivo en Markdown con los resultados principales."""
+    """Genera un reporte ejecutivo en Markdown con los resultados v2.0."""
     metrics_path = os.path.join(PATHS["results_reports"], "metrics.csv")
     stats_path   = os.path.join(PATHS["results_reports"], "area_statistics.csv")
-    feat_path    = os.path.join(PATHS["results_reports"], "feature_importance.csv")
 
     metrics_str = "No disponible"
     stats_str   = "No disponible"
-    feat_str    = "No disponible"
-    final_growth = ""
+    growth_summary = ""
 
     if os.path.exists(metrics_path):
         m = pd.read_csv(metrics_path).iloc[0]
         metrics_str = (
-            f"| Métrica | Valor |\n"
-            f"|---------|-------|\n"
-            f"| AUC-ROC | {m.get('auc_roc', 'N/A')} |\n"
-            f"| F1 Score | {m.get('f1_score', 'N/A')} |\n"
-            f"| Kappa | {m.get('kappa', 'N/A')} |\n"
-            f"| FOM | {m.get('fom', 'N/A')} |\n"
-            f"| OOB Score | {m.get('oob_score', 'N/A')} |\n"
-            f"| CV AUC (5-fold) | {m.get('cv_auc_mean', 'N/A')} ± {m.get('cv_auc_std', 'N/A')} |"
+            "| Métrica | Valor |\n"
+            "|---------|-------|\n"
+            f"| AUC-ROC (LightGBM transición) | {m.get('auc_roc', 'N/A')} |\n"
+            f"| F1 Score (transición) | {m.get('f1_score', 'N/A')} |\n"
+            f"| Kappa (transición) | {m.get('kappa', 'N/A')} |\n"
+            f"| FOM (transición) | {m.get('fom', 'N/A')} |\n"
+            f"| CV AUC 5-fold | {m.get('cv_auc_mean', 'N/A')} ± {m.get('cv_auc_std', 'N/A')} |\n"
+            f"| AUC-ROC (reglas CA aprendidas) | {m.get('ca_auc_roc', 'N/A')} |\n"
+            f"| FOM (reglas CA aprendidas) | {m.get('ca_fom', 'N/A')} |"
         )
 
     if os.path.exists(stats_path):
         df = pd.read_csv(stats_path)
-        rows = [f"| {r.year} | {r.area_km2:.1f} | {r.area_ha:.0f} | "
+        blocks = []
+        growth_rows = []
+        for scenario in SCENARIOS:
+            grp = df[df["scenario"] == scenario].sort_values("year")
+            if grp.empty:
+                continue
+            rows = [
+                f"| {int(r.year)} | {r.area_km2:.1f} | {r.area_ha:.0f} | "
                 f"{'+' if r.growth_km2 > 0 else ''}{r.growth_km2:.2f} | "
                 f"{'+' if r.growth_pct > 0 else ''}{r.growth_pct:.1f}% |"
-                for r in df.itertuples()]
-        stats_str = (
-            "| Año | Área (km²) | Área (ha) | Crecimiento (km²) | Crecimiento (%) |\n"
-            "|-----|-----------|-----------|-------------------|-----------------|\n" +
-            "\n".join(rows)
-        )
-        # Calcular crecimiento total proyectado
-        base_row = df[df["year"] == BASE_YEAR]
-        last_row = df[df["year"] == max(df["year"])]
-        if not base_row.empty and not last_row.empty:
-            delta = last_row["area_km2"].values[0] - base_row["area_km2"].values[0]
-            pct   = delta / base_row["area_km2"].values[0] * 100
-            final_growth = f"\n> **Crecimiento proyectado 2024–2030:** +{delta:.1f} km² ({pct:.1f}%)\n"
-
-    if os.path.exists(feat_path):
-        df_f = pd.read_csv(feat_path)
-        rows = [f"| {r.feature} | {r.importance:.4f} | {r.std:.4f} |"
-                for r in df_f.itertuples()]
-        feat_str = (
-            "| Variable | Importancia | Desv. Est. |\n"
-            "|----------|-------------|------------|\n" +
-            "\n".join(rows)
-        )
+                for r in grp.itertuples()
+            ]
+            base_row = grp[grp["year"] == BASE_YEAR]
+            last_row = grp[grp["year"] == grp["year"].max()]
+            if not base_row.empty and not last_row.empty:
+                delta = last_row["area_km2"].values[0] - base_row["area_km2"].values[0]
+                pct = delta / base_row["area_km2"].values[0] * 100
+                growth_rows.append(
+                    f"- **{scenario}:** +{delta:.1f} km² ({pct:.1f}%) "
+                    f"entre {BASE_YEAR} y {int(grp['year'].max())}"
+                )
+            blocks.append(
+                f"### Escenario: {scenario}\n\n"
+                "| Año | Área (km²) | Área (ha) | Crecimiento (km²) | Crecimiento (%) |\n"
+                "|-----|-----------|-----------|-------------------|-----------------|\n"
+                + "\n".join(rows)
+            )
+        stats_str = "\n\n".join(blocks)
+        if growth_rows:
+            growth_summary = (
+                "\n> **Crecimiento proyectado por escenario:**\n"
+                + "\n".join(growth_rows)
+                + "\n"
+            )
 
     report = f"""# Reporte de Predicción de Expansión Urbana
-## Mérida, Yucatán — Proyección 2025–2030
+## Mérida, Yucatán — Proyección 2025–2030 (v2.0)
 
 **Fecha de generación:** {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}
 
@@ -306,11 +324,13 @@ def generate_report():
 
 ## 1. Resumen Ejecutivo
 
-Este reporte presenta los resultados del modelo de predicción de expansión
-de la mancha urbana de la Zona Metropolitana de Mérida (ZMM) para el período
-2025–2030, utilizando un enfoque híbrido de **Random Forest + Autómata Celular**.
+Este reporte presenta los resultados del sistema de predicción de expansión
+de la mancha urbana de la Zona Metropolitana de Mérida (ZMM) para 2025–2030,
+combinando **LightGBM + Autómata Celular de reglas aprendidas + variables
+kársticas** (LST, cenotes, vulnerabilidad del acuífero). Se simulan tres
+escenarios: `no_plan`, `plan_trad` e `ia_optimo`.
 
-{final_growth}
+{growth_summary}
 
 ---
 
@@ -318,13 +338,15 @@ de la mancha urbana de la Zona Metropolitana de Mérida (ZMM) para el período
 
 ### Datos
 - **Imágenes satelitales:** LANDSAT 8/9 Collection 2, resolución 30m
-- **Años de entrenamiento:** {', '.join(str(y) for y in [2015, 2020, 2024])}
+- **Años de entrenamiento:** 2015, 2020, 2024
 - **Clasificación:** Urbano / No-urbano mediante NDVI + NDBI
 
 ### Modelo
-- **Random Forest** para aprender patrones de transición histórica
-- **Autómata Celular** para simular la dinámica espacial de expansión
-- **Función de probabilidad:** `P = {CA_CONFIG_summary()}`
+- **LightGBM** de transición urbana (gradient boosting con escala balanceada)
+- **LightGBM de reglas CA aprendidas** sobre el estado de vecindad
+  (P_LightGBM calculada out-of-fold para evitar fuga de datos)
+- **Variables kársticas** como features y restricciones (LST, cenotes, acuífero)
+- **Función de probabilidad:** {CA_CONFIG_summary()}
 
 ---
 
@@ -339,50 +361,48 @@ de la mancha urbana de la Zona Metropolitana de Mérida (ZMM) para el período
 
 ---
 
-## 4. Variables más Importantes
-
-{feat_str}
-
----
-
-## 5. Proyección de Área Urbana
+## 4. Proyección de Área Urbana por Escenario
 
 {stats_str}
 
 ---
 
-## 6. Archivos Generados
+## 5. Archivos Generados
 
 | Archivo | Descripción |
 |---------|-------------|
-| `results/maps/prediction_{{year}}.tif` | Mapa de probabilidad por año (float32) |
-| `results/maps/urban_extent_{{year}}.tif` | Área urbana binaria por año |
-| `results/maps/urban_extent_{{year}}.shp` | Shapefile del área urbana proyectada |
-| `results/maps/comparison_2024_2030.png` | Mapa comparativo |
-| `results/reports/metrics.csv` | Métricas de validación |
-| `results/reports/area_statistics.csv` | Estadísticas de área |
-| `models/rf_model.pkl` | Modelo Random Forest serializado |
+| `results/maps/prediction_{{year}}_{{scenario}}.tif` | Mapa de probabilidad (float32) por año y escenario |
+| `results/maps/urban_extent_{{year}}_{{scenario}}.tif` | Área urbana binaria por año y escenario |
+| `results/maps/expansion_map_{{year}}_{{scenario}}.png` | Mapa de probabilidad renderizado |
+| `results/maps/comparison_2024_2030_{{scenario}}.png` | Comparación base vs. 2030 por escenario |
+| `results/reports/metrics.csv` | Métricas de validación de ambos modelos |
+| `results/reports/area_statistics.csv` | Estadísticas de área por año y escenario |
+| `models/lgbm_model.pkl` | LightGBM de transición serializado |
+| `models/ca_rules_model.pkl` | LightGBM de reglas CA serializado |
 
 ---
 
-## 7. Notas y Limitaciones
+## 6. Notas y Limitaciones
 
 - El modelo asume continuidad en las tendencias de crecimiento históricas.
-- No incorpora cambios en políticas urbanas o grandes proyectos de infraestructura
-  que no estén reflejados en el período de entrenamiento.
+- Las capas kársticas dependen de datos reales (SEDUMA, CONAGUA/IMTA); si no
+  están disponibles, el pipeline usa capas sintéticas y los escenarios con
+  gestión no son representativos.
 - La resolución de 30m (LANDSAT) puede subestimar cambios en predios pequeños.
-- Para mayor precisión, se recomienda incorporar datos de densidad poblacional
-  por AGEB (INEGI 2020) y el Plan de Ordenamiento Territorial de Mérida.
+- Para mayor precisión, se recomienda incorporar densidad poblacional por AGEB
+  (INEGI 2020) y el Plan de Ordenamiento Territorial de Mérida.
 
 ---
 
-## 8. Referencias
+## 7. Referencias
 
+- Ke, G. et al. (2017). LightGBM. NIPS 2017.
 - Pontius, R.G. & Schneider, L.C. (2001). Land-cover change model validation.
   *Agriculture, Ecosystems & Environment*, 85(1–3), 239–248.
 - White, R. & Engelen, G. (1993). Cellular automata and fractal urban form.
   *Environment and Planning A*, 25(8), 1175–1199.
 - INEGI (2020). Censo de Población y Vivienda 2020.
+- SEDUMA (2023). Registro de cenotes y sistemas kársticos de Yucatán.
 """
 
     out_path = os.path.join(PATHS["results_reports"], "final_report.md")
@@ -393,9 +413,13 @@ de la mancha urbana de la Zona Metropolitana de Mérida (ZMM) para el período
 
 def CA_CONFIG_summary():
     from config.settings import CA_CONFIG
-    return (f"{CA_CONFIG['alpha']}×P_RF + "
-            f"{CA_CONFIG['beta']}×P_vecindad + "
-            f"{CA_CONFIG['gamma']}×aleatorio")
+    parts = []
+    for name, cfg in CA_CONFIG["scenarios"].items():
+        parts.append(
+            f"`{name}`: α={cfg['alpha']}·P_LightGBM + β={cfg['beta']}·P_CA + "
+            f"γ={cfg['gamma']}·P_kárstico + δ={cfg['delta']}·aleatorio"
+        )
+    return "; ".join(parts)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -414,14 +438,16 @@ def main():
         with rasterio.open(base_path) as src:
             base_urban = src.read(1)
 
-    # Mapas de probabilidad para cada año predicho
+    # Mapas de probabilidad para cada año y escenario
     log.info("\n[MAPAS] Generando mapas de probabilidad...")
-    for year in PREDICT_YEARS:
-        plot_probability_map(year, base_urban)
+    for scenario in SCENARIOS:
+        for year in PREDICT_YEARS:
+            plot_probability_map(year, scenario, base_urban)
 
-    # Comparación 2024 vs 2030
-    log.info("\n[COMPARACIÓN] Generando mapa comparativo...")
-    plot_comparison_2024_2030()
+    # Comparación 2024 vs 2030 por escenario
+    log.info("\n[COMPARACIÓN] Generando mapas comparativos...")
+    for scenario in SCENARIOS:
+        plot_comparison_2024_2030(scenario)
 
     # Gráfica de estadísticas
     log.info("\n[ESTADÍSTICAS] Generando gráficas...")

@@ -133,17 +133,42 @@ def train_transition_model(X, y, feature_names):
     return model, metrics
 
 
-def build_ca_training_data(model, X, y):
+def compute_oof_predictions(X, y, n_splits=5):
     """
-    Construye el dataset para el modelo de reglas CA.
-    X_ca = estado de vecindad + P_LightGBM + features kársticas locales
+    Predicciones out-of-fold (OOF) del LightGBM de transición.
+
+    Cada fila es predicha por un modelo entrenado SIN esa fila, así que la
+    probabilidad P_LightGBM es honesta para TODAS las muestras. Esto elimina
+    la fuga de datos que ocurría al usar model.predict_proba(X) sobre el
+    dataset completo (incluidas filas que el modelo ya había visto en
+    entrenamiento), que inflaba las métricas del modelo de reglas CA.
+
+    Usa la misma configuración de build_lgbm() que el modelo final, para que
+    la distribución de P_LightGBM sea consistente con la de inferencia
+    (scripts/04_simulate_ca.py usa el modelo final con 500 estimadores).
+    """
+    log.info("  Calculando predicciones out-of-fold (OOF) del modelo de transición...")
+    oof = np.zeros(len(y), dtype=np.float32)
+    skf = StratifiedKFold(n_splits, shuffle=True, random_state=42)
+    for i, (tr_idx, te_idx) in enumerate(skf.split(X, y), start=1):
+        y_tr = y[tr_idx]
+        fold_model = build_lgbm(y_tr.sum(), (1 - y_tr).sum())
+        fold_model.fit(X[tr_idx], y_tr)
+        oof[te_idx] = fold_model.predict_proba(X[te_idx])[:, 1]
+        log.info(f"    fold {i}/{n_splits}: OOF AUC {roc_auc_score(y[te_idx], oof[te_idx]):.4f}")
+    log.info(f"  ✓ OOF AUC-ROC global: {roc_auc_score(y, oof):.4f}")
+    return oof
+
+
+def build_ca_training_data(X, p_lgbm_oof, y):
+    """
+    Construye el dataset para el modelo de reglas CA sin fuga de datos.
+    X_ca = features base + P_LightGBM (out-of-fold)
     y_ca = ¿se convirtió la celda? (mismo y)
     """
     log.info("\nConstruyendo dataset para reglas CA aprendidas...")
-    p_lgbm = model.predict_proba(X)[:,1]
-    # Agregar P_LightGBM como feature adicional
-    X_ca = np.column_stack([X, p_lgbm])
-    log.info(f"  Dataset CA: {len(y):,} muestras | {X_ca.shape[1]} features (incluyendo P_LGB)")
+    X_ca = np.column_stack([X, p_lgbm_oof])
+    log.info(f"  Dataset CA: {len(y):,} muestras | {X_ca.shape[1]} features (incluyendo P_LGB OOF)")
     return X_ca, y
 
 
@@ -220,7 +245,9 @@ def main():
 
     X, y, available_features = load_training_data()
     model1, m1 = train_transition_model(X, y, available_features)
-    X_ca, y_ca = build_ca_training_data(model1, X, y)
+    # P_LightGBM out-of-fold (sin fuga de datos) como feature del modelo CA
+    p_lgbm_oof = compute_oof_predictions(X, y)
+    X_ca, y_ca = build_ca_training_data(X, p_lgbm_oof, y)
     model2, m2 = train_ca_rules_model(X_ca, y_ca)
 
     all_metrics = pd.DataFrame([{**m1, **{f"ca_{k}":v for k,v in m2.items() if k!="model"}}])

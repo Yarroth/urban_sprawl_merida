@@ -1,16 +1,17 @@
 """
-scripts/02_preprocess.py
+scripts/02_preprocess.py  —  v2.0
 Preprocesamiento de imágenes y extracción de variables espaciales (features).
 
 Pasos:
   1. Clasificación LULC (urbano/no-urbano) para cada año histórico
   2. Cálculo de variables espaciales (distancias, índices, vecindad)
-  3. Construcción del dataset de entrenamiento (X, y)
+  3. Features kársticas v2.0 (LST, distancia a cenotes, vulnerabilidad acuífero)
+  4. Construcción del dataset de entrenamiento (X, y)
 
 Salidas en data/processed/:
   - lulc_{year}.tif           → clasificación binaria (0=no-urbano, 1=urbano)
-  - features_{year}.tif       → stack de todas las variables
-  - training_dataset.parquet  → tabla X/y para Random Forest
+  - features_{year}.tif       → stack de 7 u 10 variables (con kársticas si hay datos)
+  - training_dataset.parquet  → tabla X/y para LightGBM
 """
 
 import os
@@ -29,7 +30,7 @@ from scipy.ndimage import (
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config.settings import (
-    STUDY_AREA, LULC_CONFIG, FEATURES_CONFIG, RF_CONFIG,
+    STUDY_AREA, LULC_CONFIG, LGBM_CONFIG, GEE_CONFIG,
     TRAIN_YEARS, PATHS, PIXEL_RESOLUTION
 )
 
@@ -41,7 +42,7 @@ log = logging.getLogger(__name__)
 # 1. CLASIFICACIÓN LULC
 # ─────────────────────────────────────────────────────────────
 
-def classify_lulc(landsat_path: str, year: int) -> np.ndarray:
+def classify_lulc(landsat_path: str, year: int) -> tuple:
     """
     Clasifica píxeles en urbano (1) / no-urbano (0) usando NDVI y NDBI.
     Aplica apertura morfológica para eliminar ruido.
@@ -49,6 +50,9 @@ def classify_lulc(landsat_path: str, year: int) -> np.ndarray:
     Estrategia:
     - Un píxel es 'urbano' si NDVI < umbral Y NDBI > umbral
     - Se eliminan parches aislados < min_patch_size píxeles
+
+    Retorna (urban, transform, profile, lst): lst es la temperatura superficial
+    en °C si el GeoTIFF incluye la banda térmica ST_B10, o None si no.
     """
     log.info(f"  Clasificando LULC para {year}...")
 
@@ -85,6 +89,9 @@ def classify_lulc(landsat_path: str, year: int) -> np.ndarray:
     small_patches[0] = False
     urban_clean[small_patches[labeled]] = 0
 
+    # LST desde la banda térmica ST_B10 (v2.0)
+    lst = compute_lst(bands)
+
     # Guardar GeoTIFF
     out_path = PATHS["lulc_base"].format(year=year)
     profile.update(count=1, dtype=rasterio.uint8, compress="lzw", nodata=255)
@@ -93,7 +100,7 @@ def classify_lulc(landsat_path: str, year: int) -> np.ndarray:
 
     urban_pct = urban_clean.mean() * 100
     log.info(f"  ✓ LULC {year}: {urban_pct:.1f}% urbano → {out_path}")
-    return urban_clean, transform, profile
+    return urban_clean, transform, profile, lst
 
 
 # ─────────────────────────────────────────────────────────────
@@ -184,19 +191,122 @@ def load_ndvi_mean(landsat_paths: list) -> np.ndarray:
     return np.mean(ndvi_stack, axis=0).astype(np.float32)
 
 
-def extract_features(year: int, urban: np.ndarray, transform, crs: str, landsat_paths: list) -> np.ndarray:
+# ─────────────────────────────────────────────────────────────
+# 2b. VARIABLES KÁRSTICAS (v2.0)
+# ─────────────────────────────────────────────────────────────
+
+def compute_lst(bands: np.ndarray):
+    """
+    Temperatura superficial (LST) en °C desde la banda térmica ST_B10.
+
+    En la exportación de GEE la banda ST_B10 viaja en bruto (DN) y se
+    convierte con: Kelvin = DN * lst_scale + lst_offset.
+    Posición esperada: índice 6 (tras SR_B2..SR_B7, antes de NDVI/NDBI/EVI).
+    Si el archivo no incluye banda térmica o los valores no son plausibles,
+    retorna None (la feature kárstica se omite).
+    """
+    if bands.shape[0] < 7:
+        return None
+    st_b10 = bands[6]  # ST_B10 (DN sin escala)
+    lst = st_b10 * GEE_CONFIG["lst_scale"] + GEE_CONFIG["lst_offset"] - 273.15
+    lst = np.clip(lst, -5.0, 60.0)
+    # Rellenar NaN (píxeles enmascarados) con la mediana de valores válidos
+    if np.isnan(lst).any():
+        valid = lst[~np.isnan(lst)]
+        if valid.size:
+            lst = np.where(np.isnan(lst), np.median(valid), lst)
+    valid = lst[~np.isnan(lst)]
+    if valid.size == 0 or np.median(valid) < -5 or np.median(valid) > 60:
+        log.warning("    Banda térmica con valores fuera de rango — LST omitida.")
+        return None
+    return lst.astype(np.float32)
+
+
+def compute_distance_to_cenotes(cenotes_path: str, shape: tuple, transform, crs: str):
+    """Distancia euclidiana (m) al cenote más cercano desde el registro SEDUMA."""
+    if not os.path.exists(cenotes_path):
+        log.warning(f"    Cenotes no encontrados: {cenotes_path}. Feature dist_cenote omitida.")
+        return None
+    try:
+        import geopandas as gpd
+        from rasterio.features import rasterize
+        from shapely.geometry import mapping
+
+        cenotes = gpd.read_file(cenotes_path).to_crs(crs)
+        if cenotes.empty:
+            log.warning("    Shapefile de cenotes vacío. Feature dist_cenote omitida.")
+            return None
+        cenote_raster = rasterize(
+            [(mapping(geom), 1) for geom in cenotes.geometry if not geom.is_empty],
+            out_shape=shape, transform=transform, fill=0, dtype=np.uint8,
+        )
+        dist_pixels = distance_transform_edt(1 - cenote_raster)
+        return (dist_pixels * PIXEL_RESOLUTION).astype(np.float32)
+    except Exception as e:
+        log.warning(f"    No se pudo calcular distancia a cenotes ({e}). Feature omitida.")
+        return None
+
+
+def load_karst_vulnerability(path: str, shape: tuple, transform, crs: str):
+    """
+    Índice de vulnerabilidad del acuífero kárstico (0-1), remuestreado a la
+    rejilla de estudio si el CRS/resolución difiere.
+    """
+    if not os.path.exists(path):
+        log.warning(f"    Vulnerabilidad kárstica no encontrada: {path}. Feature omitida.")
+        return None
+    try:
+        with rasterio.open(path) as src:
+            if src.count < 1:
+                return None
+            src_arr = src.read(1).astype(np.float32)
+            if src.shape == shape and src.transform == transform:
+                data = src_arr
+            else:
+                from rasterio.warp import reproject, Resampling
+                data = np.zeros(shape, dtype=np.float32)
+                reproject(
+                    source=src_arr,
+                    destination=data,
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=crs,
+                    resampling=Resampling.bilinear,
+                )
+        return np.clip(np.nan_to_num(data, nan=0.0), 0.0, 1.0).astype(np.float32)
+    except Exception as e:
+        log.warning(f"    No se pudo leer vulnerabilidad kárstica ({e}). Feature omitida.")
+        return None
+
+
+def read_feature_names(path: str):
+    """Lee los nombres de banda de un GeoTIFF de features (tags 'name')."""
+    with rasterio.open(path) as src:
+        return [
+            src.tags(i).get("name") or f"feature_{i}"
+            for i in range(1, src.count + 1)
+        ]
+
+
+def extract_features(year: int, urban: np.ndarray, lst, transform, crs: str,
+                     landsat_paths: list) -> tuple:
     """
     Construye el stack de features para un año dado.
-    Retorna array (n_features, rows, cols).
+    Retorna (feature_stack, feature_names).
 
-    Features:
-        0: dist_urban_edge   — distancia al borde urbano (m)
-        1: dist_center       — distancia al centro histórico (m)
-        2: dist_road         — distancia a carretera más cercana (m)
-        3: ndvi_mean         — NDVI promedio histórico
-        4: neighbor_3x3      — densidad vecindad 3x3
-        5: neighbor_5x5      — densidad vecindad 5x5
-        6: neighbor_9x9      — densidad vecindad 9x9
+    Features base (siempre):
+        0: dist_urban_edge — distancia al borde urbano (m)
+        1: dist_center     — distancia al centro histórico (m)
+        2: dist_road       — distancia a carretera más cercana (m)
+        3: ndvi_mean       — NDVI promedio histórico
+        4: neighbor_3x3    — densidad vecindad 3x3
+        5: neighbor_5x5    — densidad vecindad 5x5
+        6: neighbor_9x9    — densidad vecindad 9x9
+    Features kársticas v2.0 (solo si los datos reales están disponibles):
+        7: lst_mean        — temperatura superficial (°C)
+        8: dist_cenote     — distancia al cenote más cercano (m)
+        9: karst_vuln      — vulnerabilidad del acuífero kárstico (0-1)
     """
     log.info(f"  Extrayendo features para {year}...")
     shape = urban.shape
@@ -218,30 +328,51 @@ def extract_features(year: int, urban: np.ndarray, transform, crs: str, landsat_
     f6 = compute_neighborhood_density(urban, radius=4)   # 9x9
     log.info("    f4-f6 vecindad ✓")
 
-    feature_stack = np.stack([f0, f1, f2, f3, f4, f5, f6], axis=0)
+    feature_list = [f0, f1, f2, f3, f4, f5, f6]
+    names = [
+        "dist_urban_edge", "dist_center", "dist_road",
+        "ndvi_mean", "neighbor_3x3", "neighbor_5x5", "neighbor_9x9",
+    ]
 
-    # Normalizar distancias (0-1) para mejor convergencia del RF
-    for i in [0, 1, 2]:
+    # --- Features kársticas v2.0 (si los datos reales existen) ---
+    if lst is not None:
+        feature_list.append(lst)
+        names.append("lst_mean")
+        log.info("    f7 lst_mean ✓ (ST_B10)")
+
+    cenote_dist = compute_distance_to_cenotes(PATHS["cenotes"], shape, transform, crs)
+    if cenote_dist is not None:
+        feature_list.append(cenote_dist)
+        names.append("dist_cenote")
+        log.info("    f8 dist_cenote ✓")
+
+    karst_vuln = load_karst_vulnerability(PATHS["karst_vuln"], shape, transform, crs)
+    if karst_vuln is not None:
+        feature_list.append(karst_vuln)
+        names.append("karst_vuln")
+        log.info("    f9 karst_vuln ✓")
+
+    feature_stack = np.stack(feature_list, axis=0)
+
+    # Normalizar distancias base (0-1) para mejor convergencia del LightGBM.
+    # dist_cenote y lst_mean NO se normalizan: se consumen en bruto en la
+    # simulación CA (04) con sus propias escalas.
+    for i in range(3):
         max_val = np.percentile(feature_stack[i], 99)
         if max_val > 0:
             feature_stack[i] = np.clip(feature_stack[i] / max_val, 0, 1)
 
-    return feature_stack.astype(np.float32)
+    return feature_stack.astype(np.float32), names
 
 
-def save_features(feature_stack: np.ndarray, year: int, profile: dict):
-    """Guarda el stack de features como GeoTIFF multibanda."""
+def save_features(feature_stack: np.ndarray, feature_names: list, year: int, profile: dict):
+    """Guarda el stack de features como GeoTIFF multibanda con nombres de banda."""
     out_path = PATHS["features"].format(year=year)
     n_bands = feature_stack.shape[0]
     profile.update(count=n_bands, dtype=rasterio.float32, compress="lzw", nodata=-9999)
 
     with rasterio.open(out_path, "w", **profile) as dst:
         dst.write(feature_stack)
-        # Nombres de bandas para referencia
-        feature_names = [
-            "dist_urban_edge", "dist_center", "dist_road",
-            "ndvi_mean", "neighbor_3x3", "neighbor_5x5", "neighbor_9x9"
-        ]
         for i, name in enumerate(feature_names, start=1):
             dst.update_tags(i, name=name)
 
@@ -267,6 +398,7 @@ def build_training_dataset(year_pairs: list) -> tuple:
     log.info("  Construyendo dataset de entrenamiento...")
     all_X = []
     all_y = []
+    feature_names = None
 
     for t0, t1 in year_pairs:
         lulc_t0_path = PATHS["lulc_base"].format(year=t0)
@@ -285,6 +417,8 @@ def build_training_dataset(year_pairs: list) -> tuple:
             urban_t1 = src.read(1).astype(np.uint8)
         with rasterio.open(feat_t0_path) as src:
             features = src.read().astype(np.float32)
+        if feature_names is None:
+            feature_names = read_feature_names(feat_t0_path)
 
         # Máscara: solo celdas no-urbanas en t0
         non_urban_mask = (urban_t0 == 0)
@@ -297,7 +431,7 @@ def build_training_dataset(year_pairs: list) -> tuple:
         X = features.reshape(n_features, -1).T[non_urban_mask.ravel()]
 
         # Submuestreo estratificado para manejar memoria
-        max_samples = RF_CONFIG["max_train_samples"] // len(year_pairs)
+        max_samples = LGBM_CONFIG["max_train_samples"] // len(year_pairs)
         if len(y) > max_samples:
             rng = np.random.default_rng(42)
             idx = rng.choice(len(y), size=max_samples, replace=False)
@@ -316,10 +450,8 @@ def build_training_dataset(year_pairs: list) -> tuple:
     y_final = np.concatenate(all_y)
 
     # Guardar como parquet (eficiente para datos geoespaciales)
-    feature_names = [
-        "dist_urban_edge", "dist_center", "dist_road",
-        "ndvi_mean", "neighbor_3x3", "neighbor_5x5", "neighbor_9x9"
-    ]
+    if feature_names is None:
+        feature_names = [f"feature_{i}" for i in range(1, X_final.shape[1] + 1)]
     df = pd.DataFrame(X_final, columns=feature_names)
     df["urban"] = y_final
 
@@ -362,14 +494,14 @@ def main():
             continue
 
         log.info(f"\n[{year}] Procesando...")
-        urban, transform, profile = classify_lulc(path, year)
+        urban, transform, profile, lst = classify_lulc(path, year)
         transforms[year] = transform
         profiles[year] = profile
 
         # Features con historial de NDVI (años anteriores disponibles)
         hist_paths = [landsat_paths[y] for y in TRAIN_YEARS if y <= year and os.path.exists(landsat_paths[y])]
-        feat_stack = extract_features(year, urban, transform, crs, hist_paths)
-        save_features(feat_stack, year, profile.copy())
+        feat_stack, feat_names = extract_features(year, urban, lst, transform, crs, hist_paths)
+        save_features(feat_stack, feat_names, year, profile.copy())
 
     # Construir dataset de entrenamiento con pares de años
     year_pairs = list(zip(TRAIN_YEARS[:-1], TRAIN_YEARS[1:]))

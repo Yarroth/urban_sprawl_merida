@@ -131,7 +131,7 @@ PATHS = {
     "lgbm_model":      os.path.join(BASE_DIR, "models", "lgbm_model.pkl"),
     "ca_model":        os.path.join(BASE_DIR, "models", "ca_rules_model.pkl"),
     "prediction":      os.path.join(BASE_DIR, "results", "maps", "prediction_{year}_{scenario}.tif"),
-    "urban_extent":    os.path.join(BASE_DIR, "results", "maps", "urban_extent_{year}_{scenario}.shp"),
+    "urban_extent":    os.path.join(BASE_DIR, "results", "maps", "urban_extent_{year}_{scenario}.tif"),
     "municipalities":  os.path.join(BASE_DIR, "data", "raw", "merida_municipio.shp"),
     "roads":           os.path.join(BASE_DIR, "data", "raw", "red_vial_zmm.shp"),
     "cenotes":         os.path.join(BASE_DIR, "data", "raw", "cenotes_seduma.shp"),
